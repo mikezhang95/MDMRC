@@ -1,23 +1,22 @@
 
 import numpy as np
 
-def collect_statistic(data, name):
+def collect_statistic(datas, name):
     """
         Args:
-            - data: dict
+            - datas: a list of dict, or a dict of dict
             - name: name of data
     """
 
-    # 1. lenghts
     lens = []
-    for key, item in data.items():
-        if "question" in item:
-            lens.append(len(item["question"]))
-        elif "context" in item:
-            lens.append(len(item["context"]))
+    for i, key in enumerate(datas):
+        if type(datas) == dict:
+            data = datas[key]
         else:
-            pass
-    
+            data = key
+        context = data['context']
+        lens.append(len(context))
+
     print("====== {} = ===== ".format(name))
     print("Total: {}  Length MIN/MAX/AVG: {}/{}/{:.4f}".format(
             len(lens),np.min(lens),np.max(lens),np.average(lens)))

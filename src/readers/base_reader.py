@@ -12,11 +12,15 @@ class BaseReader(torch.nn.Module):
     def forward(self, queries, documents):
         """
             Args:
-                - queries: [batch_size, ?]
-                - documents: [batch_size, topk, ?]
+                - queries: batch_size * dict, dict contains the information related to this query
+                - documents: a big dict for all documents 
             Returns:
-                - answers: [batch_size, ?]
+                - j(ans, score),...] inserted in every query_dict
         """
+        return 0
+
+
+    def update(self,loss):
         pass
 
     # train and validate
