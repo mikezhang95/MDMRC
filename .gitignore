@@ -1,0 +1,4 @@
+*.pyc
+data/raw_data/
+data/processed_data/
+
