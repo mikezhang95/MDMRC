@@ -43,7 +43,6 @@ def train(model, train_data, config):
         for batch_cnt, batch in enumerate(train_loader):
             # BATCH
 
-            # optimizer.zero_grad()
             loss_r1 =  retriever.compute_loss(batch)
             retriever.predict(batch) # provide doc candidate(cut off/not sample)
 
@@ -51,7 +50,6 @@ def train(model, train_data, config):
             # loss_r2 = reader.compute_loss(batch)
             # retriever.update(loss_r1)
             # reader.update(loss_r2)
-            # optimizer.step()
 
             # print training loss every print_frequency batch
             if (batch_cnt+1) % config.print_frequency == 0:

@@ -6,6 +6,9 @@ from collections import Counter
 from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu
 bleu_smoothing_function = SmoothingFunction().method1
 
+from rouge import Rouge
+rouge = Rouge()
+
 
 def to_tokens(string):
     """
@@ -18,10 +21,7 @@ def to_tokens(string):
         string_tokens = string
     return string_tokens
 
-
-
-
-def precision_recall_f1(prediction, ground_truth):
+def f1_fn(prediction, ground_truth):
     """
         This function calculates and returns the precision, recall and f1-score
         Args:
@@ -30,7 +30,6 @@ def precision_recall_f1(prediction, ground_truth):
         Returns:
             - (p, r, f1)
     """
-
     prediction_tokens = to_tokens(prediction)
     ground_truth_tokens = to_tokens(ground_truth)
 
@@ -43,9 +42,7 @@ def precision_recall_f1(prediction, ground_truth):
     f1 = (2 * p * r) / (p + r)
     return p, r, f1
 
-
-
-def bleu4(reference, hypothesis):
+def bleu_fn(hypothesis, reference):
     """
         This function calculates and returns the bleu-4
         Args:
@@ -57,7 +54,6 @@ def bleu4(reference, hypothesis):
     bleu_score = sentence_bleu([reference_tokens], hypothesis_tokens,
                         smoothing_function=bleu_smoothing_function)
     return bleu_score
-
 
 def topk_fn(probs, label, topk):
     """
@@ -79,6 +75,11 @@ def topk_fn(probs, label, topk):
 
     return result
 
+def rouge_fn(hypothesis, reference):
+    reference_tokens = to_tokens(reference)
+    hypothesis_tokens = to_tokens(hypothesis)
+    scores = rouge.get_scores(hypothesis_tokens, reference_tokens)
+    return scores[0]["rouge-l"]["f"]
 
 
 

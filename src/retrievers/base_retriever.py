@@ -2,6 +2,7 @@
     This is the virtual base class of retriever
 """
 
+import os
 import numpy as np
 import torch
 from metrics import *
@@ -19,13 +20,21 @@ class BaseRetriever(torch.nn.Module):
         self.doc_list = list(self.documents.keys())
         self.config = config
 
+    def forward(self, queries):
+        """
+            Generated keys:
+                - "doc_logit": a torch tensor
+        """
+        pass
+
 
     def compute_loss(self, queries):
         """
-            Args:
-                - queries: batch_size * dict, "doc_id" & "doc_logit" must be provided in dict
+            Needed keys:
+                - "doc_id": an int
+                - "doc_logit": a torch tensor
             Returns:
-                - loss: 
+                - cross_entropy loss
         """
 
         # 1. calculate logits
@@ -46,14 +55,12 @@ class BaseRetriever(torch.nn.Module):
         loss = loss_fn(logits, labels)
         return loss
 
-
-
     def predict(self, queries, topk=-1):
         """
-            Args:
-                - queries: batch_size * dict, "doc_logit" must be provided in dict
-            Returns:
-                - add "doc_candidates" key in dict
+            Needed keys:
+                - "doc_id": an int
+            Generated keys:
+                - "doc_candidates": a list of tuple (id, score) 
         """
         if topk==-1:
             topk = len(self.doc_list)
@@ -87,9 +94,20 @@ class BaseRetriever(torch.nn.Module):
 
         return metric_result
 
+
+    def load(self, path, model_id):
+        """
+            load {model_id}-retriever from {path}
+        """
+        self.load_state_dict(torch.load(os.path.join(path, '{}-retriever'.format(model_id))))
+
+
+    def save(self, path, model_id):
+        """
+            save {model_id}-retrieverin {path}
+        """
+        torch.save(self.state_dict(), os.path.join(path, '{}-retriever'.format(model_id)))
+
+
     def update(self, loss):
         pass
-
-
-
-
