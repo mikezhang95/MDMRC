@@ -19,6 +19,8 @@ def to_tokens(string):
     return string_tokens
 
 
+
+
 def precision_recall_f1(prediction, ground_truth):
     """
         This function calculates and returns the precision, recall and f1-score
@@ -57,10 +59,26 @@ def bleu4(reference, hypothesis):
     return bleu_score
 
 
+def topk_fn(probs, label, topk):
+    """
+        Input must be numpy
+    """ 
 
-# TODO: https://github.com/SunnyMarkLiu/lic2019-dureader2.0-rank2/blob/master/preprocess/3.extract_paragraph.py
-# they use both answer and question in train data. But answer is missing in test.
-def calculate_match_score(query, doc):
-    f1 = precision_recall_f1(doc, query)[2]
-    bleu = bleu4(doc, query)
-    return f1 * bleu
+    idx = list(range(len(probs)))
+    idx.sort(key=lambda i: probs[i])
+
+    assert label < len(probs)
+    position = idx.index(label)
+
+    result = []
+    for k in topk:
+        if position<k:
+            result.append(1)
+        else:
+            result.append(0)
+
+    return result
+
+
+
+

@@ -9,6 +9,25 @@ import torch
 DATA_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../data/'
 
 
+def merge_dict(dict_old, dict_new):
+    for k,v in dict_new.items():
+        if k in dict_old:
+            dict_old[k].extend(v)
+        else:
+            dict_old[k] = v
+
+
+def to_numpy(tensor):
+    return tensor.cpu().numpy()
+
+def to_torch(array, use_gpu=False):
+    if use_gpu:
+        tensor = torch.from_numpy(array) # gpu support here
+    else:
+        tensor = torch.from_numpy(array)
+    return tensor
+
+
 class Pack(dict):
     def __getattr__(self, name):
         if name in self:

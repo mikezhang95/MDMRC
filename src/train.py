@@ -55,7 +55,7 @@ prepare_dirs_loggers(config)
 
 # start logger
 logger = logging.getLogger()
-scur_time))tart_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+start_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
 logger.info('[START]\n{}\n{}'.format(start_time, '=' * 30))
 
 
