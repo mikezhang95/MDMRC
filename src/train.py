@@ -25,6 +25,7 @@ import retrievers
 import readers
 
 
+
 # arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('--config_name', type=str, default="bm25_bert")

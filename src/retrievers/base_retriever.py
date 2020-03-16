@@ -26,7 +26,7 @@ class BaseRetriever(torch.nn.Module):
         self.forward(queries)
 
         # 2. predict
-        self.predict(queries)
+        self.predict(queries, self.config.retriever_topk)
 
         # 3. compute_loss
         if mode == "train":
@@ -53,7 +53,7 @@ class BaseRetriever(torch.nn.Module):
             logit = query["doc_logit"]
             label = self.doc_list.index(query["doc_id"])
             logits.append(logit)
-            labels.append(to_torch(np.array(label), self.config.use_gpu))
+            labels.append(to_torch(np.array(label), use_gpu=self.config.use_gpu))
 
         logits = torch.stack(logits)
         labels = torch.stack(labels)
@@ -84,6 +84,14 @@ class BaseRetriever(torch.nn.Module):
             doc_scores.sort(key=lambda x: -x[1])
             selected_docs = doc_scores[:topk]
             query["doc_candidates"] = selected_docs
+
+            # retrieve cheat (give groud truth to reader)
+            l = [d[0] for d in selected_docs]
+            if self.config.retriever_cheat and 'doc_id' in query:
+                if query['doc_id'] not in d[0]:
+                    max_prob = selected_docs[0][1]
+                    selected_docs.insert((query['doc_id'], max_prob),0)
+                    selected_docs.pop()
 
 
     def collect_metric(self, queries):

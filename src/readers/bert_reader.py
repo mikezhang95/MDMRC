@@ -3,7 +3,8 @@
 """
 
 import torch
-from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
+from torch.nn import Dropout, Linear, RReLU
+from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup, BertModel, BertConfig
 
 from readers import BaseReader
 from metrics import *
@@ -16,14 +17,16 @@ class BertReader(BaseReader):
 
         self.init_network()
     
+
         # init tokenizer
-        vocab_file = self.config.bert_vocab_file
+        bert_dir = BASE_DIR + self.config.bert_dir
+        vocab_file = bert_dir + "vocab.txt"
         self.tokenizer = BertTokenizer(vocab_file)
 
         # init optimzier
         lr = self.config.lr
-        self.optimizer = AdamW(self.parameters(), lr=lr, correct_biase=False)
-        num_training_steps = config.num_epoch * conifg.num_samples / config.batch_size
+        self.optimizer = AdamW(self.parameters(), lr=lr, correct_bias=False)
+        num_training_steps = config.num_epoch * config.num_samples / config.batch_size
         num_warmup_steps = 0
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
@@ -53,17 +56,20 @@ class BertReader(BaseReader):
         self.dropout = Dropout(self.config.dropout)
 
         # bert part
-        bert_config_file = self.config.bert_config_file
-        bert_config = BertConfig.from_pretrained(bert_config_file)
+        bert_dir = BASE_DIR + self.config.bert_dir
+        self.bert =BertModel.from_pretrained(bert_dir)
+        bert_config = self.bert.config
         bert_hidden = bert_config.hidden_size # 768
-        self.bert = BertModel(bert_config)
 
         # head part
         head_hidden = self.config.head_hidden
-        self.start_hidden = Linear(bert_hidden, head_hidden, activation="rrelu")
-        self.start_head = Linear(head_hidden, 1)
-        self.end_hidden = Linear(bert_hidden, head_hidden, activation="rrelu")
-        self.end_head = Linear(head_hidden, 1)
+        self.start_hidden = Linear(bert_hidden, head_hidden, bias=True)
+        self.start_head = Linear(head_hidden, 1, bias=True)
+        self.end_hidden = Linear(bert_hidden, head_hidden, bias=True) 
+        self.end_head = Linear(head_hidden, 1, bias=True)
+
+        # activation
+        self.activation = RReLU()
     
 
     def forward(self, queries):
@@ -78,8 +84,10 @@ class BertReader(BaseReader):
 
         out_seq = self.dropout(out_seq) # [bs,seq_len,768]
 
-        start_logits = self.start_head(self.start_hidden(out_seq)) # [bs,seq_len,2]
-        end_logits = self.end_head(self.end_hidden(out_seq) )# [bs,seq_len,2]
+        start_hidden = self.start_hidden(out_seq)
+        start_logits = self.start_head(self.activation(start_hidden))
+        end_hidden = self.end_hidden(out_seq)
+        end_logits = self.end_head(self.activation(end_hidden))
 
         # start_labels, end_labels
         return start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels
@@ -106,16 +114,16 @@ class BertReader(BaseReader):
 
         for query in queries:
             if "bert_cut" not in query:
-                query["bert_cut"] = self.tokenizer(query["context"])
+                query["bert_cut"] = self.tokenizer.tokenize(query["context"])
             text_a = query["bert_cut"]
 
             docs = query["doc_candidates"] 
             for doc in docs: 
 
-                doc_id, doc_score = docs
+                doc_id, doc_score = doc
 
                 if "bert_cut" not in self.documents[doc_id]:
-                    self.documents[doc_id]["bert_cut"] = self.tokenizer(self.documents[doc_id]["context"])
+                    self.documents[doc_id]["bert_cut"] = self.tokenizer.tokenize(self.documents[doc_id]["context"])
 
                 text_b = self.documents[doc_id]["bert_cut"]
                 inp_seq = ["[CLS]"] + text_a + ["[SEP]"] + text_b + ["[SEP]"]
@@ -137,16 +145,19 @@ class BertReader(BaseReader):
         # 1. 生成input_ids
         input_seqs = pad_sequence(input_seqs, '[PAD]') # 补全query到同一个长度
         input_ids = [self.tokenizer.convert_tokens_to_ids(sq) for sq in input_seqs] # 字符token转化为词汇表里的编码id
+        input_ids = to_torch(np.array(input_ids),use_gpu=self.config.use_gpu)
 
         # 2. 生成attention_mask
         attention_mask = pad_sequence(attention_mask)
+        attention_mask = to_torch(np.array(attention_mask),use_gpu=self.config.use_gpu)
 
         # 3. 生成token_type_ids
         token_type_ids = pad_sequence(token_type)
+        token_type_ids = to_torch(np.array(token_type_ids),use_gpu=self.config.use_gpu)
 
         # 4. 生成labels
-        start_labels = to_torch(np.stack(start_labels), self.config_use_gpu)
-        end_labels = to_torch(np.stack(end_labels), self.config_use_gpu)
+        start_labels = to_torch(np.stack(start_labels), use_gpu=self.config.use_gpu)
+        end_labels = to_torch(np.stack(end_labels),use_gpu=self.config.use_gpu)
 
         return input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels
 
@@ -162,7 +173,7 @@ class BertReader(BaseReader):
         return loss
 
 
-    def predict(self, queries):
+    def predict(self, queries, start_logits, end_logits, input_seqs, query_lens):
         """
             Generated keys:
                 - "answer_pred"

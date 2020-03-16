@@ -6,8 +6,8 @@ import random
 import numpy as np
 import torch
 
-DATA_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../data/'
-
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../'
+DATA_DIR =  BASE_DIR + 'data/'
 
 def merge_dict(dict_old, dict_new):
     for k,v in dict_new.items():
@@ -20,8 +20,8 @@ def merge_dict(dict_old, dict_new):
 def to_numpy(tensor):
     return tensor.cpu().numpy()
 
-def to_torch(array, use_gpu=False):
-    tensor = torch.from_numpy(array)
+def to_torch(array, use_gpu=False, dtype=torch.long):
+    tensor = torch.from_numpy(array).to(dtype)
     if use_gpu:
         tensor = tensor.cuda()
     else:
@@ -87,7 +87,7 @@ def set_seed(seed):
     """Sets random seed everywhere."""
     torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torchh.cuda.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 

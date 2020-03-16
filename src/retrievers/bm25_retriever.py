@@ -5,6 +5,8 @@
 import numpy as np
 import torch
 from rank_bm25 import BM25Okapi
+
+from utils import *
 from retrievers import BaseRetriever
 
 class BM25Retriever(BaseRetriever):
@@ -25,7 +27,7 @@ class BM25Retriever(BaseRetriever):
     def forward(self, queries):
         for query in queries:
             match_scores = list(self.bm25.get_scores(query['jieba_context']))
-            logit = torch.log(torch.from_numpy(np.clip(match_scores, 1e-9, np.inf))) # to avoid overflow
+            logit = torch.log(to_torch(np.clip(match_scores, 1e-9, np.inf),use_gpu=self.config.use_gpu, dtype=torch.float)) # to avoid overflow
             query["doc_logit"] = logit
 
 
