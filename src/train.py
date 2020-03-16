@@ -68,11 +68,16 @@ with open(os.path.join(saved_path, 'config.json'), 'w') as f:
 train_data, test_data, documents = load_data(config)
 # split dataset into train/val 4:1
 train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2)
+config["num_samples"]= len(train_data)
 
 # create model
 retriever_class = getattr(retrievers, config.retriever_name)
 retriever = retriever_class(documents, config)
-reader = None
+reader_class = getattr(readers, config.reader_name)
+reader = reader_class(documents, config)
+if config.use_gpu:
+    retriever = retriever.cuda()
+    reader = reader.cuda()
 model = (retriever, reader)
 
 ##################### Training #####################

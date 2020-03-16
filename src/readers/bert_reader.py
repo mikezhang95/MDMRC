@@ -6,7 +6,8 @@ import torch
 from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
 
 from readers import BaseReader
-
+from metrics import *
+from utils import *
 
 class BertReader(BaseReader):
 
@@ -22,9 +23,29 @@ class BertReader(BaseReader):
         # init optimzier
         lr = self.config.lr
         self.optimizer = AdamW(self.parameters(), lr=lr, correct_biase=False)
-        num_training_step = config.epoch * conifg.num_samples / config.batch_size
+        num_training_steps = config.num_epoch * conifg.num_samples / config.batch_size
         num_warmup_steps = 0
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
+
+
+    def read(self, queries, mode="test"):
+        # 1. calculate logits
+        start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels = self.forward(queries)
+
+        # 2. predict
+        self.predict(queries, start_logits, end_logits, input_seqs, query_lens)
+
+        # 3. compute_loss
+        if mode == "train":
+            return self.compute_loss(queries, start_logits, end_logits, start_labels, end_labels)
+        else:
+            return 0
+
+
+    def update(self, loss):
+        loss.backward()
+        self.optimizer.step()
+        self.scheduler.step()
 
 
     def init_network(self):
@@ -44,69 +65,75 @@ class BertReader(BaseReader):
         self.end_hidden = Linear(bert_hidden, head_hidden, activation="rrelu")
         self.end_head = Linear(head_hidden, 1)
     
+
     def forward(self, queries):
+        # 0. clear optimizer (for training)
+        self.optimizer.zero_grad()
 
+        # 1. create inputs for BERT
+        input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels = self.create_input(queries)
 
-        input_ids, token_type_ids, attention_mask, input_seqs 
-            = self.create_input(queries)
-
-        # bs = real_batch_size * candidate_num
-        out_seq, _ = self.bert(input_ids, token_type_ids=token_type_ids
-                attention_mask=attention_mask)
+        # batch_size = real_batch_size * candidate_num
+        out_seq, _ = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
 
         out_seq = self.dropout(out_seq) # [bs,seq_len,768]
 
         start_logits = self.start_head(self.start_hidden(out_seq)) # [bs,seq_len,2]
         end_logits = self.end_head(self.end_hidden(out_seq) )# [bs,seq_len,2]
 
-        self.create_output(self, queries, start_logits, end_logits)
+        # start_labels, end_labels
+        return start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels
 
 
     def create_input(self, queries):
         """
-            Generated keys:
-                "start_label": #candidate
-                "end_label": #candidate
-                "input_seq": #candidate * []
-            
+            Returns:
+                - input_ids
+                - attention_mask
+                - token_type_ids
+                - input_seqs
+                - query_lens
+                - start_labels
+                - end_labels
         """
-
         input_seqs = []  # 输入序列
         attention_mask = []  #  序列mask
         token_type = []  # sentence A/B
+        query_lens = [] # length of [CLS] + text_a + [SEP]
+
+        # for training only 
+        start_labels, end_labels = [], []
 
         for query in queries:
-            if "bert_cut_context" not in query:
-                query["bert_cut_context"] = self.tokenizer(query["context"])
-            text_a = query["bert_cut_context"]
-            docs = query["doc_candidates"] 
+            if "bert_cut" not in query:
+                query["bert_cut"] = self.tokenizer(query["context"])
+            text_a = query["bert_cut"]
 
-            start, end = [], []
-            for doc in docs: # num * seq_len
+            docs = query["doc_candidates"] 
+            for doc in docs: 
 
                 doc_id, doc_score = docs
 
-                # create label for
-                if "doc_id" in query:
-                    if doc_id == query["doc_id"]:
-                        start.append(query["start"])
-                        end.append(query["end"])
-                    else:
-                        start.append(0)
-                        end.append(0)
+                if "bert_cut" not in self.documents[doc_id]:
+                    self.documents[doc_id]["bert_cut"] = self.tokenizer(self.documents[doc_id]["context"])
 
-                if "bert_cut_context" not in self.documents[doc_id]:
-                    self.documents[doc_id]["bert_cut_context"] = self.tokenizer(self.documents[doc_id]["context"])
-
-                text_b = self.documents[doc_id]["bert_cut_context"]
+                text_b = self.documents[doc_id]["bert_cut"]
                 inp_seq = ["[CLS]"] + text_a + ["[SEP]"] + text_b + ["[SEP]"]
                 input_seqs.append(inp_seq)
                 attention_mask.append([1] * len(inp_seq))
-                token_type.append([0] * len(text_a) + [1] * len(text_b))
+                token_type.append([0]*(2+len(text_a)) + [1]*(1+len(text_b)))
 
-            query["start_label"] = start_label
-            query["end_label"] = end_label
-            
+                query_lens.append(2 + len(text_a))
+                # create label for training
+                if "doc_id" in query:
+                    if doc_id == query["doc_id"]:
+                        # [CLS]+text_a+[SEP]+document
+                        start_labels.append(query_lens[-1] + query["start"])
+                        end_labels.append(query_lens[-1] + query["end"])
+                    else:
+                        start_labels.append(0) # [CLS]
+                        end_labels.append(0) # [CLS]
+
         # 1. 生成input_ids
         input_seqs = pad_sequence(input_seqs, '[PAD]') # 补全query到同一个长度
         input_ids = [self.tokenizer.convert_tokens_to_ids(sq) for sq in input_seqs] # 字符token转化为词汇表里的编码id
@@ -117,25 +144,98 @@ class BertReader(BaseReader):
         # 3. 生成token_type_ids
         token_type_ids = pad_sequence(token_type)
 
-        return input_ids, attention_mask, token_type_ids, input_seq
+        # 4. 生成labels
+        start_labels = to_torch(np.stack(start_labels), self.config_use_gpu)
+        end_labels = to_torch(np.stack(end_labels), self.config_use_gpu)
+
+        return input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels
 
 
-    def create_output(self, queries, start_logits, end_logits):
+    def compute_loss(self, start_logits, end_logits, start_labels, end_labels):
+        """
+        """
+        loss_fn = torch.nn.CrossEntropyLoss()
+        start_loss = loss_fn(start_logits, start_labels)
+        end_loss = loss_fn(end_logits, end_labels)
+        loss = start_loss + end_loss
+
+        return loss
+
+
+    def predict(self, queries):
         """
             Generated keys:
-                - "start_logit"
-                - "end_logit"
+                - "answer_pred"
+                - "doc_id_pred"
         """
         i = 0
         for query in queries:
-            doc_ids = query["doc_candidates"] 
-            num_doc = len(doc_ids)
-            query["start_logit"] = start_logits[i:i+num_doc]
-            query["end_logit"] = end_logits[i:i+num_doc]
 
-    def update(self, loss):
-        loss.backward()
-        self.optimizer.step()
-        self.scheduler.step()
-        self.optimizer.zero_grad()
-        pass
+            num = len(query["doc_candidates"])
+
+            start_logit = start_logits[i:i+num]
+            end_logit = end_logits[i:i+num]
+            input_seq = input_seqs[i:i+num]
+            query_len = query_lens[i:i+num]
+            i += num
+
+            answer = find_best_answer(input_seq, query_len, start_logit, end_logit)
+            query["answer_pred"] = answer[0]
+            query["doc_id_pred"] = query["doc_candidates"][answer[1]][0]
+
+
+
+# Method 1: y = max_z argmax_y[ p(y|z,x) ]
+def find_best_answer(seqs, lens, start_logits, end_logits, weights=None):
+    final_answer = ""
+    final_doc_id = 0
+    max_prob = -np.inf
+
+    # for some documents
+    doc_cnt = -1
+    for seq, length, start_logit, end_logit in zip(seqs, lens, start_logits, end_logits):
+
+        doc_cnt += 1
+        # for one document
+        span, max_score = (0,0), -np.inf
+        for i in range(length, len(seq)):
+            for j in range(i,len(seq)):
+                score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
+                if score > max_score:
+                    max_score = score
+                    span = (i, j)
+        answer = seq[span[0]:span[1]+1]
+        prob = max_score
+        if prob > max_prob:
+            max_prob = prob
+            final_answer = answer
+            final_doc_id = doc_cnt
+    
+    return final_answer, final_doc_id
+
+
+
+# # Method 2: y = argmax_y [ sum_z p(y|z,x)*p(z|x) ]
+# def find_best_answer(seqs, lens, start_logits, end_logits, weights):
+    # """
+        # Find best answer from all document candidates
+        # Args:
+    # """
+    # spans = {}
+    # for seq, length, start_logit, end_logit, weight in zip(seqs, lens, start_logits, end_logits, weights):
+
+        # # calculate probability
+        # # TODO: avoid overflow
+        # start_prob = torch.exp(start_logit)/torch.sum(torch.exp(start_logit))
+        # end_prob = torch.exp(end_logit)/torch.sum(torch.exp(end_logit))
+        # for i in range(length, len(seq)):
+            # for j in range(i,len(seq)):
+                # prob = start_prob[i] * end_prob[j]
+                # answer = seq[i:j+1]
+                # if answer in spans:
+                    # spans[answer] += prob * weight
+                # else:
+                    # spans[answer] = prob * weight
+        # sorted_answer = sorted(spans.items()，key=lambda x: x[1])
+        # return sorted_answer[-1][0], 0
+

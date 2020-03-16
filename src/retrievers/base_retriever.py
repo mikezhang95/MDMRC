@@ -20,12 +20,19 @@ class BaseRetriever(torch.nn.Module):
         self.doc_list = list(self.documents.keys())
         self.config = config
 
-    def forward(self, queries):
-        """
-            Generated keys:
-                - "doc_logit": a torch tensor
-        """
-        pass
+
+    def retrieve(self, queries, mode="test"):
+        # 1. calculate logits
+        self.forward(queries)
+
+        # 2. predict
+        self.predict(queries)
+
+        # 3. compute_loss
+        if mode == "train":
+            return self.compute_loss(queries)
+        else:
+            return 0
 
 
     def compute_loss(self, queries):
@@ -46,7 +53,8 @@ class BaseRetriever(torch.nn.Module):
             logit = query["doc_logit"]
             label = self.doc_list.index(query["doc_id"])
             logits.append(logit)
-            labels.append(to_torch(np.array(label)))
+            labels.append(to_torch(np.array(label), self.config.use_gpu))
+
         logits = torch.stack(logits)
         labels = torch.stack(labels)
         assert labels.size()[0] == logits.size()[0]
@@ -54,6 +62,7 @@ class BaseRetriever(torch.nn.Module):
         loss_fn = torch.nn.CrossEntropyLoss()
         loss = loss_fn(logits, labels)
         return loss
+
 
     def predict(self, queries, topk=-1):
         """
@@ -109,5 +118,16 @@ class BaseRetriever(torch.nn.Module):
         torch.save(self.state_dict(), os.path.join(path, '{}-retriever'.format(model_id)))
 
 
+# YZ: For a retriever, only needs to write this two function
+    def forward(self, queries):
+        """
+            Generated_keys:
+                - "doc_logit": logit for every doc
+        """ 
+        pass
+
     def update(self, loss):
+        """
+            Update parameters
+        """
         pass

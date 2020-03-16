@@ -29,6 +29,7 @@ class BM25Retriever(BaseRetriever):
             query["doc_logit"] = logit
 
 
+
 if __name__ == '__main__':
 
     import time

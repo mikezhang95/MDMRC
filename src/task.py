@@ -35,19 +35,15 @@ def train(model, train_loader, val_loader, config):
         # EPOCH
         logger.info('\n***** Epoch {}/{} *****'.format(epoch, config.num_epoch))
         retriever.train()
-        # reader.train()
+        reader.train()
 
         num_batch = len(train_loader)
         for batch_cnt, batch in enumerate(train_loader):
             # BATCH
-
-            loss_r1 =  retriever.compute_loss(batch)
-            retriever.predict(batch) # provide doc candidate(cut off/not sample)
-
-            loss_r2 = 0
-            # loss_r2 = reader.compute_loss(batch)
-            # retriever.update(loss_r1)
-            # reader.update(loss_r2)
+            loss_r1 =  retriever.retrieve(batch, mode="train")
+            loss_r2 = reader.read(batch,mode="train")
+            retriever.update(loss_r1)
+            reader.update(loss_r2)
 
             # print training loss every print_frequency batch
             if (batch_cnt+1) % config.print_frequency == 0:
@@ -90,7 +86,7 @@ def validate(model, data_loader):
     # models
     retriever, reader = model
     retriever.eval()
-    # reader.eval()
+    reader.eval()
 
     # validate result
     loss_retriever, loss_reader = 0.0, 0.0
@@ -98,15 +94,20 @@ def validate(model, data_loader):
 
     for i, batch in enumerate(data_loader):
 
-        # # loss for retriever
-        # loss1 = retriever.compute_loss(batch)
-        # loss_retriever += loss1 * len(batch)
+        # forward pass
+        loss1 =  retriever.retrieve(batch, mode="train")
+        loss_retriever += loss1
+        loss2 = reader.read(batch,mode="train")
+        loss_reader += loss2
+
         # calculate topk for retriever
         metric1 = retriever.collect_metric(batch)
         merge_dict(metric_retriever, metric1)
 
-        # loss for reader
-        # TODO:
+        # calculate bleu/f1/rouge
+        metric2 = reader.collect_metric(batch)
+        merge_dict(metric_reader, metric2)
+
 
     # TODO: save badcase
     # YZ: calculate mean right now. Analyss badcase later

@@ -21,11 +21,24 @@ def to_numpy(tensor):
     return tensor.cpu().numpy()
 
 def to_torch(array, use_gpu=False):
+    tensor = torch.from_numpy(array)
     if use_gpu:
-        tensor = torch.from_numpy(array) # gpu support here
+        tensor = tensor.cuda()
     else:
-        tensor = torch.from_numpy(array)
+        use_gpu = tensor.gpu()
     return tensor
+
+def pad_sequence(seqs, pad=None, max_len=None):
+    if not max_len:       
+        max_len = max([len(s) for s in seqs])
+    if not pad:
+        pad = 0
+    for i in range(len(seqs)):
+        if len(seqs[i]) > max_len:
+            seqs[i] = seqs[i][:max_len]
+        else:
+            seqs[i].extend([pad] * (max_len - len(seqs[i])))
+    return seqs
 
 
 class Pack(dict):
