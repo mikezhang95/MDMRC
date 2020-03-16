@@ -40,7 +40,7 @@ class BertReader(BaseReader):
 
         # 3. compute_loss
         if mode == "train":
-            return self.compute_loss(queries, start_logits, end_logits, start_labels, end_labels)
+            return self.compute_loss(start_logits, end_logits, start_labels, end_labels)
         else:
             return 0
 
