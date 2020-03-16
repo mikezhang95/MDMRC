@@ -81,10 +81,10 @@ def train(model, train_data, config):
 
 
 
-    logger.info(ny"Training Ends.\n Best Validation Loss:
-            - Retriever {:.4f} at Epcoh {}\n
+    logger.info("Training Ends.\n Best Validation Loss: \
+            - Retriever {:.4f} at Epcoh {}\n  \
             - Reader {:.4f} at Epoch {}".format(best_loss_retriever, best_epoch_retriever,best_loss_reader, best_epoch_reader))
-
+ 
     return best_epoch_retriever, best_epoch_reader
 
 

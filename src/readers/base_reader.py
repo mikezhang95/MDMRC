@@ -18,7 +18,6 @@ class BaseReader(torch.nn.Module):
                 - "end_logit": #candidate * []
         """ 
 
-
     # TODO: when to insert when to insert when to insert when to insert
     """
         start_label
@@ -154,8 +153,7 @@ def find_best_answer(seqs, start_logits, end_logits, weights=None):
         span, max_score = (0,0), -np.inf
         for i in range(len(seq)):
             for j in range(i,len(seq)):
-                score = start_logit[i] + end_logit[j]
-                    - start_logit[0] - end_logit[0]
+                score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
                 if score > max_score:
                     max_score = score
                     span = (i, j)

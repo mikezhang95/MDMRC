@@ -61,7 +61,7 @@ def topk_fn(probs, label, topk):
     """ 
 
     idx = list(range(len(probs)))
-    idx.sort(key=lambda i: probs[i])
+    idx.sort(key=lambda i: -probs[i])
 
     assert label < len(probs)
     position = idx.index(label)

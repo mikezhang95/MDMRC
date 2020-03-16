@@ -25,7 +25,7 @@ class BM25Retriever(BaseRetriever):
     def forward(self, queries):
         for query in queries:
             match_scores = list(self.bm25.get_scores(query['cut_context']))
-            logit = torch.log(torch.from_numpy(np.clip(match_scores, 1e-9, 1.0))) # to avoid overflow
+            logit = torch.log(torch.from_numpy(np.clip(match_scores, 1e-9, np.inf))) # to avoid overflow
             query["doc_logit"] = logit
 
 

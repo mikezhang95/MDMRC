@@ -19,7 +19,7 @@ sys.path.append(os.path.join(BASE_DIR, "src"))
 
 from utils import Pack, prepare_dirs_loggers, set_seed
 from data_loader import load_data
-from task import  train 
+from task import  train, validate
 
 import retrievers
 import readers
@@ -81,19 +81,20 @@ if not config.forward_only:
         best_epoch = train(model, train_data, config)
     except KeyboardInterrupt:
         logger.error('Training stopped by keyboard.')
-# if best_epoch is None:
-    # model_ids = sorted([int(p.replace('-model', '')) for p in os.listdir(saved_path) if 'model' in p and 'rl' not in p])
-    # # TODO: why is  -3
-    # # best_epoch = model_ids[-3]
-    # best_epoch = model_ids[-1]
-# model.load(saved_path, best_epoch)
+if best_epoch is None:
+    retriever_models = sorted([int(p.replace('-retriever', '')) for p in os.listdir(saved_path) if 'retriever' in p])
+    reader_models = sorted([int(p.replace('-reader', '')) for p in os.listdir(saved_path) if 'reader' in p])
+    best_epoch = (retriever_models[-1], reader_modes[-1])
+
+# load best model
+retriever.load(saved_path, best_epoch[0])
+reader.load(saved_path, best_epoch[1])
 
 
-# ##################### Validation #####################
-# logger.info("\n***** Forward Only Evaluation on val/test *****")
-# logger.info("$$$ Load {}-model".format(best_epoch))
-# validate(model, val_data, config)
-# validate(model, test_data, config)
+##################### Validation #####################
+logger.info("\n***** Evaluation on val *****")
+logger.info("$$$ Load {}-model".format(best_epoch))
+validate(model, val_data)
 
 # ##################### Generation #####################
 # # TODO: support write into files
