@@ -18,7 +18,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../'
 sys.path.append(os.path.join(BASE_DIR, "src"))
 
 from utils import Pack, prepare_dirs_loggers, set_seed
-from data_loader import load_data
+from data_loader import load_data, get_data_loader
 from task import  train, validate
 
 import retrievers
@@ -66,6 +66,8 @@ with open(os.path.join(saved_path, 'config.json'), 'w') as f:
 
 # load dataset 
 train_data, test_data, documents = load_data(config)
+# split dataset into train/val 4:1
+train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2)
 
 # create model
 retriever_class = getattr(retrievers, config.retriever_name)
@@ -73,33 +75,31 @@ retriever = retriever_class(documents, config)
 reader = None
 model = (retriever, reader)
 
-
 ##################### Training #####################
 best_epoch = None
 if not config.forward_only:
     try:
-        best_epoch = train(model, train_data, config)
+        best_epoch = train(model, train_loader, val_loader, config)
     except KeyboardInterrupt:
         logger.error('Training stopped by keyboard.')
 if best_epoch is None:
     retriever_models = sorted([int(p.replace('-retriever', '')) for p in os.listdir(saved_path) if 'retriever' in p])
     reader_models = sorted([int(p.replace('-reader', '')) for p in os.listdir(saved_path) if 'reader' in p])
-    best_epoch = (retriever_models[-1], reader_modes[-1])
+    # best_epoch = (retriever_models[-1], reader_modes[-1])
+    best_epoch = (retriever_models[-1], 0)
 
 # load best model
 retriever.load(saved_path, best_epoch[0])
-reader.load(saved_path, best_epoch[1])
+# reader.load(saved_path, best_epoch[1])
 
 
 ##################### Validation #####################
-logger.info("\n***** Evaluation on val *****")
-logger.info("$$$ Load {}-model".format(best_epoch))
-validate(model, val_data)
+logger.info("\n***** Evaluation on VAL *****")
+logger.info("$$$ Load {}-model $$$".format(best_epoch))
+validate(model, val_loader)
 
 # ##################### Generation #####################
 # # TODO: support write into files
-# with open(os.path.join(saved_path, '{}_valid_file.txt'.format(best_epoch)), 'w') as f:
-    # generate(model, val_data, config, evaluator, dest_f=f)
 
 # with open(os.path.join(saved_path, '{}_test_file.txt'.format(best_epoch)), 'w') as f:
     # generate(model, test_data, config, evaluator, dest_f=f)

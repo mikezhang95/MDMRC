@@ -17,14 +17,14 @@ class BM25Retriever(BaseRetriever):
         # create BM25 model
         self.corpus = [] 
         for key, doc in documents.items():
-            self.corpus.append(doc['cut_context'])
+            self.corpus.append(doc['jieba_context'])
 
         self.bm25 = BM25Okapi(self.corpus)
 
     # calculate (query, document) logit
     def forward(self, queries):
         for query in queries:
-            match_scores = list(self.bm25.get_scores(query['cut_context']))
+            match_scores = list(self.bm25.get_scores(query['jieba_context']))
             logit = torch.log(torch.from_numpy(np.clip(match_scores, 1e-9, np.inf))) # to avoid overflow
             query["doc_logit"] = logit
 

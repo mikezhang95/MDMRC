@@ -4,10 +4,11 @@ import json
 import numpy as np
 from statistic import collect_statistic
 from preprocess import clean_text
+from split_doc import check_data, split
 
 # this needs to be assigned
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))  + '/'
-RAW_DATA_DIR = CUR_DIR + "../../data/raw_data/"
+RAW_DATA_DIR = CUR_DIR + "../../data/clean_data/"
 NEW_DATA_DIR = CUR_DIR + "../../data/processed/"
 if not os.path.exists(NEW_DATA_DIR):
     os.makedirs(NEW_DATA_DIR)
@@ -18,7 +19,7 @@ with open(RAW_DATA_DIR + "context.csv", "r") as f:
     lines = f.readlines()[1:]
     for line in lines:
         e = line.strip().split('\t')
-        document[e[0]] = {"context": e[1]}
+        document[e[0]] = {"context": " ".join(e[1:])} # YZ: may have many '\t'
 
 # 2. load train data 
 train_data = []
@@ -45,7 +46,8 @@ with open(RAW_DATA_DIR + "test.csv", "r") as f:
 # 5. check data
 # check whether all answers in documents
 # create lable like start/end
-
+check_data(train_data, document)
+train_data, document = split(train_data, document)
 
 # 6. clean data
 # include normalize/segment/...

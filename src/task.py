@@ -17,7 +17,7 @@ from utils import merge_dict
 logger = logging.getLogger()
 
 
-def train(model, train_data, config):
+def train(model, train_loader, val_loader, config):
 
     # training parameters
     best_epoch_retriever, best_loss_retriever = 0, np.inf
@@ -29,9 +29,6 @@ def train(model, train_data, config):
     saved_models_reader = []
     last_n_model = config.last_n_model 
 
-    # split dataset into train/val 4:1
-    train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2)
-
     cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
     print('***** Training Begins at {} *****'.format(cur_time))
     for epoch in range(config.num_epoch):
@@ -40,6 +37,7 @@ def train(model, train_data, config):
         retriever.train()
         # reader.train()
 
+        num_batch = len(train_loader)
         for batch_cnt, batch in enumerate(train_loader):
             # BATCH
 
@@ -53,7 +51,7 @@ def train(model, train_data, config):
 
             # print training loss every print_frequency batch
             if (batch_cnt+1) % config.print_frequency == 0:
-                logger.info("{}/{} Batch: Retriever-{:.4f}  Reader-{:.4f}".format(loss_r1, loss_r2))
+                logger.info("{}/{} Batch: Retriever-{:.4f}  Reader-{:.4f}".format(batch_cnt+1, num_batch, loss_r1, loss_r2))
 
         # Evaluate at the end of every epoch
         cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
@@ -88,7 +86,7 @@ def train(model, train_data, config):
     return best_epoch_retriever, best_epoch_reader
 
 
-def validate(model, data):
+def validate(model, data_loader):
     # models
     retriever, reader = model
     retriever.eval()
@@ -98,18 +96,17 @@ def validate(model, data):
     loss_retriever, loss_reader = 0.0, 0.0
     metric_retriever, metric_reader = {}, {}
 
-    for batch in data:
+    for i, batch in enumerate(data_loader):
 
-        # loss for retriever
-        loss1 = retriever.compute_loss(batch)
-        loss_retriever += loss1 * len(batch)
+        # # loss for retriever
+        # loss1 = retriever.compute_loss(batch)
+        # loss_retriever += loss1 * len(batch)
         # calculate topk for retriever
         metric1 = retriever.collect_metric(batch)
         merge_dict(metric_retriever, metric1)
 
         # loss for reader
         # TODO:
-
 
     # TODO: save badcase
     # YZ: calculate mean right now. Analyss badcase later
@@ -125,14 +122,13 @@ def validate(model, data):
     return loss_retriever, loss_reader
 
 
-def generate(model, data):
+def generate(model, data_loader):
     # models
     retriever, reader = model
     retrieve.eval()
     # reader.eval()
 
-    for batch in data:
-        
+    for batch in data_loader:
         retriever.predict(batch) # generate doc candidates
         answer = reader.predict(batch) # generate answer
 
@@ -147,8 +143,6 @@ def generate(model, data):
 # def joint_train():
     # # joint train retriever and reader
 #     pass
-
-# def kfold_train():
 
 
 

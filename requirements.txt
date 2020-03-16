@@ -1,0 +1,4 @@
+rank-bm25==0.2
+rouge==1.0.0
+transformers==2.5.0
+torch==1.4.0
