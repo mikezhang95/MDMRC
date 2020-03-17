@@ -5,14 +5,14 @@
 cd src/data_utils
 python creat_data.py
 
-# Train
+## 2. Train
 cd src
 python train.py
 
-# Evaluate
+## 3. Evaluate
 cd src
 python train.py --forward-only
 
-# Generate
+## 4. Generate
 TODO
 
