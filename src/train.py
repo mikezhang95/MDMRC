@@ -48,7 +48,10 @@ if config.forward_only:
     config = Pack(json.load(open(os.path.join(saved_path, 'config.json'))))
     config['forward_only'] = True
 else:
-    saved_path = os.path.join(stats_path, args.config_name + '-' + args.alias)
+    alias = args.alias
+    if alias != "" :
+        alias = '-' + alias
+    saved_path = os.path.join(stats_path, args.config_name + alias)
     if not os.path.exists(saved_path):
         os.makedirs(saved_path)
 config.saved_path = saved_path
@@ -92,11 +95,11 @@ if best_epoch is None:
     retriever_models = sorted([int(p.replace('-retriever', '')) for p in os.listdir(saved_path) if 'retriever' in p])
     reader_models = sorted([int(p.replace('-reader', '')) for p in os.listdir(saved_path) if 'reader' in p])
     # best_epoch = (retriever_models[-1], reader_modes[-1])
-    best_epoch = (retriever_models[-1], 0)
+    best_epoch = (retriever_models[-1], reader_models[-1])
 
 # load best model
 retriever.load(saved_path, best_epoch[0])
-# reader.load(saved_path, best_epoch[1])
+reader.load(saved_path, best_epoch[1])
 
 
 ##################### Validation #####################
@@ -109,7 +112,6 @@ validate(model, val_loader)
 
 # with open(os.path.join(saved_path, '{}_test_file.txt'.format(best_epoch)), 'w') as f:
     # generate(model, test_data, config, evaluator, dest_f=f)
-
 
 end_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
 logger.info('[END]\n' + end_time)

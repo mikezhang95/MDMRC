@@ -55,16 +55,11 @@ def bleu_fn(hypothesis, reference):
                         smoothing_function=bleu_smoothing_function)
     return bleu_score
 
-def topk_fn(probs, label, topk):
+def topk_fn(order_list, label, topk):
     """
-        Input must be numpy
     """ 
 
-    idx = list(range(len(probs)))
-    idx.sort(key=lambda i: -probs[i])
-
-    assert label < len(probs)
-    position = idx.index(label)
+    position = order_list.index(label)
 
     result = []
     for k in topk:
@@ -76,8 +71,8 @@ def topk_fn(probs, label, topk):
     return result
 
 def rouge_fn(hypothesis, reference):
-    reference_tokens = to_tokens(reference)
-    hypothesis_tokens = to_tokens(hypothesis)
+    reference_tokens = "".join(to_tokens(reference))
+    hypothesis_tokens = "".join(to_tokens(hypothesis))
     scores = rouge.get_scores(hypothesis_tokens, reference_tokens)
     return scores[0]["rouge-l"]["f"]
 

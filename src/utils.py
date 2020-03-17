@@ -3,11 +3,14 @@ import os
 import sys
 import logging
 import random
+import time
 import numpy as np
 import torch
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../'
 DATA_DIR =  BASE_DIR + 'data/'
+
+logger = logging.getLogger()
 
 def merge_dict(dict_old, dict_new):
     for k,v in dict_new.items():
@@ -92,12 +95,15 @@ def set_seed(seed):
     random.seed(seed)
 
 def prepare_dirs_loggers(config, script=""):
+
+    log_level = logging.INFO
+
     logFormatter = logging.Formatter("%(message)s")
     rootLogger = logging.getLogger()
-    rootLogger.setLevel(logging.DEBUG)
+    rootLogger.setLevel(log_level)
 
     consoleHandler = logging.StreamHandler(sys.stdout)
-    consoleHandler.setLevel(logging.DEBUG)
+    consoleHandler.setLevel(log_level)
     consoleHandler.setFormatter(logFormatter)
     rootLogger.addHandler(consoleHandler)
 
@@ -105,9 +111,20 @@ def prepare_dirs_loggers(config, script=""):
         return
 
     fileHandler = logging.FileHandler(os.path.join(config.saved_path,'session.log'))
-    fileHandler.setLevel(logging.DEBUG)
+    fileHandler.setLevel(log_level)
     fileHandler.setFormatter(logFormatter)
     rootLogger.addHandler(fileHandler)
     return
 
+
+import functools
+def cost(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kw):
+        start_time = time.time()
+        ret = func(*args, **kw)
+        end_time = time.time()
+        logger.debug('@%s took %.6f seconds' % (func.__name__, end_time-start_time))
+        return ret
+    return wrapper
 

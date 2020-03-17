@@ -3,6 +3,9 @@ import re
 import math
 import numpy as np
 
+from transformers import BertTokenizer
+t = BertTokenizer("../../models/albert_tiny/vocab.txt")
+
 
 D_LEN = 400 # If you dont want to split doc, just set D_LEN a very big number
 STRIDE = 250 # override length
@@ -63,6 +66,9 @@ def correct_label(train_data, documents, paragraphs):
                 data['doc_id'] = paragraph_id
                 data['start']= start
                 data['end'] = end
+                # create speical label for bert
+                data['start_bert'] = len(t.tokenize(context[:start]))
+                data['end_bert'] = len(t.tokenize(context[:end]))
                 break
         
         if "start" not in data:

@@ -3,7 +3,10 @@
 """
 
 
+import os
 import torch
+from utils import *
+from metrics import *
 
 class BaseReader(torch.nn.Module):
 
@@ -17,7 +20,7 @@ class BaseReader(torch.nn.Module):
         """
             load {model_id}-reader from {path}
         """
-        self.load_state_dict(torch.load(os.path.join(path, '{}-retriever'.format(model_id))))
+        self.load_state_dict(torch.load(os.path.join(path, '{}-reader'.format(model_id))))
 
     def save(self, path, model_id):
         """
@@ -32,7 +35,7 @@ class BaseReader(torch.nn.Module):
                 - answer
                 - answer_pred
         """
-        metric_result = {}
+        metric_result = {"bleu":[], "f1":[], "rouge":[]}
 
         # bleu/rouge/f1
         for query in queries:
@@ -41,9 +44,9 @@ class BaseReader(torch.nn.Module):
             answer_gt = list(query["answer"])
             answer_pred = list(query["answer_pred"])
             
-            metric_result["bleu"] = bleu_fn(answer_pred, answer_gt)
-            metric_result["f1"] = f1_fn(answer_pred, answer_gt)[2]
-            metric_result["rouge"] = rouge_fn(answer_pred, answer_gt)
+            metric_result["bleu"].append(bleu_fn(answer_pred, answer_gt))
+            metric_result["f1"].append(f1_fn(answer_pred, answer_gt)[2])
+            metric_result["rouge"].append(rouge_fn(answer_pred, answer_gt))
 
         return metric_result
 

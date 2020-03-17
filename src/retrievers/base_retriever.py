@@ -21,77 +21,63 @@ class BaseRetriever(torch.nn.Module):
         self.config = config
 
 
+    @cost
     def retrieve(self, queries, mode="test"):
+
         # 1. calculate logits
-        self.forward(queries)
+        doc_logits, doc_labels = self.forward(queries)
 
         # 2. predict
-        self.predict(queries, self.config.retriever_topk)
+        self.predict(queries, doc_logits, self.config.retriever_topk)
 
         # 3. compute_loss
         if mode == "train":
-            return self.compute_loss(queries)
+            loss = self.compute_loss(doc_logits, doc_labels)
         else:
-            return 0
+            loss = 0
+
+        return loss
 
 
-    def compute_loss(self, queries):
+    def compute_loss(self, logits, labels):
         """
-            Needed keys:
-                - "doc_id": an int
                 - "doc_logit": a torch tensor
             Returns:
                 - cross_entropy loss
         """
-
-        # 1. calculate logits
-        self.forward(queries)
-
-        # 2. calculate cross entropy loss
-        logits, labels = [], []
-        for query in queries:
-            logit = query["doc_logit"]
-            label = self.doc_list.index(query["doc_id"])
-            logits.append(logit)
-            labels.append(to_torch(np.array(label), use_gpu=self.config.use_gpu))
-
-        logits = torch.stack(logits)
-        labels = torch.stack(labels)
-        assert labels.size()[0] == logits.size()[0]
-
         loss_fn = torch.nn.CrossEntropyLoss()
         loss = loss_fn(logits, labels)
         return loss
 
 
-    def predict(self, queries, topk=-1):
+    def predict(self, queries, doc_logits, topk=-1):
         """
-            Needed keys:
-                - "doc_id": an int
             Generated keys:
                 - "doc_candidates": a list of tuple (id, score) 
+                - "doc_order": a list of tuple (id, score) 
         """
         if topk==-1:
             topk = len(self.doc_list)
 
-        # 1. calculate logits
-        self.forward(queries)
+        doc_logits = to_numpy(doc_logits)
 
         # 2. sort documents and return topk
-        for query in queries:
-            match_scores = to_numpy(query["doc_logit"])
-            doc_scores = list(zip(self.doc_list, match_scores))
+        for query, doc_logit in zip(queries, doc_logits):
+            doc_scores = list(zip(self.doc_list, doc_logit))
             doc_scores.sort(key=lambda x: -x[1])
-            selected_docs = doc_scores[:topk]
-            query["doc_candidates"] = selected_docs
+            doc_order = [x[0] for x in doc_scores]
 
             # retrieve cheat (give groud truth to reader)
-            l = [d[0] for d in selected_docs]
+            # this only influences doc_candidates passed to reader but not doc_order.
             if self.config.retriever_cheat and 'doc_id' in query:
-                if query['doc_id'] not in d[0]:
-                    max_prob = selected_docs[0][1]
-                    selected_docs.insert((query['doc_id'], max_prob),0)
-                    selected_docs.pop()
+                p = doc_order.index(query['doc_id'])
+                if p >= topk:
+                    e = doc_scores.pop(p)
+                    doc_scores.insert(e, 0)
+
+            selected_docs = doc_scores[:topk]
+            query["doc_candidates"] = selected_docs
+            query["doc_order"] = doc_order
 
 
     def collect_metric(self, queries):
@@ -103,9 +89,9 @@ class BaseRetriever(torch.nn.Module):
             metric_result["top%d"%k] = []
 
         for query in queries:
-            logit = to_numpy(query["doc_logit"])
-            label = self.doc_list.index(query["doc_id"])
-            result = topk_fn(logit, label, topk) 
+            doc_order = query["doc_order"]
+            label = query["doc_id"]
+            result = topk_fn(doc_order, label, topk) 
             for i, k in enumerate(topk):
                 metric_result["top%d"%k].append(result[i])
 

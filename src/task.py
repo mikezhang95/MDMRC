@@ -4,6 +4,7 @@
 """
 
 
+import torch 
 import os
 import sys
 import time
@@ -30,7 +31,7 @@ def train(model, train_loader, val_loader, config):
     last_n_model = config.last_n_model 
 
     cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
-    print('***** Training Begins at {} *****'.format(cur_time))
+    logger.info('***** Training Begins at {} *****'.format(cur_time))
     for epoch in range(config.num_epoch):
         # EPOCH
         logger.info('\n***** Epoch {}/{} *****'.format(epoch, config.num_epoch))
@@ -47,7 +48,7 @@ def train(model, train_loader, val_loader, config):
 
             # print training loss every print_frequency batch
             if (batch_cnt+1) % config.print_frequency == 0:
-                logger.info("{}/{} Batch: Retriever-{:.4f}  Reader-{:.4f}".format(batch_cnt+1, num_batch, loss_r1, loss_r2))
+                logger.info("{}/{} Batch Loss: Retriever-{:.4f}  Reader-{:.4f}".format(batch_cnt+1, num_batch, loss_r1, loss_r2))
 
         # Evaluate at the end of every epoch
         cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
@@ -105,37 +106,41 @@ def validate(model, data_loader):
 
     for i, batch in enumerate(data_loader):
 
-        # forward pass
-        loss1 =  retriever.retrieve(batch, mode="train")
-        loss_retriever += loss1
-        loss2 = reader.read(batch,mode="train")
-        loss_reader += loss2
+        # print("{}/{}".format(i, len(data_loader)))
 
-        # calculate topk for retriever
+        # 1. retriever forward
+        loss1 =  retriever.retrieve(batch, mode="train")
+        loss_retriever += loss1.item()
+
+        ###  calculate topk for retriever
         metric1 = retriever.collect_metric(batch)
         merge_dict(metric_retriever, metric1)
 
-        # calculate bleu/f1/rouge
-        metric2 = reader.collect_metric(batch)
-        merge_dict(metric_reader, metric2)
+        # 2. retriever forward
+        loss2 = reader.read(batch,mode="train")
+        loss_reader += loss2.item()
 
+        ### calculate bleu/f1/rouge
+        metric2 = reader.collect_metric(batch)
 
     # TODO: save badcase
 
+
+    # calculate sample mean
     num_batch = len(data_loader)
     loss_retriever /= float(num_batch)
     loss_reader /= float(num_batch)
-
-    # YZ: calculate mean right now. Analyss badcase later
     for k,v in metric_retriever.items():
         metric_retriever[k] = np.mean(v)
+    for k,v in metric_reader.items():
+        metric_reader[k] = np.mean(v)
 
-    logger.info('\n--- Retriever loss = {}'.format(loss_retriever))
+    # print information
+    logger.info('--- Retriever loss = {} ---'.format(loss_retriever))
     logger.info(json.dumps(metric_retriever))
-
-    logger.info('\n--- Reader loss = {}'.format(loss_reader))
+    logger.info('--- Reader loss = {} ---'.format(loss_reader))
     logger.info(json.dumps(metric_reader))
-    sys.stdout.flush()
+
     return loss_retriever, loss_reader
 
 
@@ -156,6 +161,7 @@ def generate(model, data_loader):
 # def pre_train():
     # # mask words to pretrain language model
     # pass
+
 
 # def joint_train():
     # # joint train retriever and reader

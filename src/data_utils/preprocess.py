@@ -1,5 +1,8 @@
 
 import jieba
+from transformers import BertTokenizer
+
+t = BertTokenizer("../../models/albert_tiny/vocab.txt")
 
 
 # TODO:  
@@ -15,5 +18,6 @@ def clean_text(datas):
         else:
             data = key
         context = data['context']
-        data['jieba_context'] = jieba.lcut(context)
+        data['jieba_cut'] = jieba.lcut(context)
+        data['bert_cut'] = t.tokenize(context)
 

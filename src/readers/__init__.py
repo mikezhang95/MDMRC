@@ -1,4 +1,6 @@
 
 from readers.base_reader import *
 from readers.bert_reader import *
+from readers.albert_reader import *
+
 

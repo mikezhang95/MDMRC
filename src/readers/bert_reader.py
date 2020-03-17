@@ -4,7 +4,8 @@
 
 import torch
 from torch.nn import Dropout, Linear, RReLU
-from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup, BertModel, BertConfig
+from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup, BertModel
+from model.modeling_albert import AlbertModel
 
 from readers import BaseReader
 from metrics import *
@@ -19,8 +20,8 @@ class BertReader(BaseReader):
     
 
         # init tokenizer
-        bert_dir = BASE_DIR + self.config.bert_dir
-        vocab_file = bert_dir + "vocab.txt"
+        self.bert_dir = BASE_DIR + self.config.bert_dir
+        vocab_file = self.bert_dir + "vocab.txt"
         self.tokenizer = BertTokenizer(vocab_file)
 
         # init optimzier
@@ -31,6 +32,7 @@ class BertReader(BaseReader):
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
 
+    @cost
     def read(self, queries, mode="test"):
         # 1. calculate logits
         start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels = self.forward(queries)
@@ -40,16 +42,17 @@ class BertReader(BaseReader):
 
         # 3. compute_loss
         if mode == "train":
-            return self.compute_loss(start_logits, end_logits, start_labels, end_labels)
+            loss = self.compute_loss(start_logits, end_logits, start_labels, end_labels)
         else:
-            return 0
+            loss = 0
+        return loss
 
 
     def update(self, loss):
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
-
+    
 
     def init_network(self):
         # dropout part
@@ -57,7 +60,8 @@ class BertReader(BaseReader):
 
         # bert part
         bert_dir = BASE_DIR + self.config.bert_dir
-        self.bert =BertModel.from_pretrained(bert_dir)
+        # self.bert = BertModel.from_pretrained(bert_dir)
+        self.bert = AlbertModel.from_pretrained(bert_dir)
         bert_config = self.bert.config
         bert_hidden = bert_config.hidden_size # 768
 
@@ -69,7 +73,7 @@ class BertReader(BaseReader):
         self.end_head = Linear(head_hidden, 1, bias=True)
 
         # activation
-        self.activation = RReLU()
+        self.activation = RReLU(inplace=True)
     
 
     def forward(self, queries):
@@ -93,6 +97,7 @@ class BertReader(BaseReader):
         return start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels
 
 
+    @cost
     def create_input(self, queries):
         """
             Returns:
@@ -113,17 +118,13 @@ class BertReader(BaseReader):
         start_labels, end_labels = [], []
 
         for query in queries:
-            if "bert_cut" not in query:
-                query["bert_cut"] = self.tokenizer.tokenize(query["context"])
+
             text_a = query["bert_cut"]
 
             docs = query["doc_candidates"] 
             for doc in docs: 
 
                 doc_id, doc_score = doc
-
-                if "bert_cut" not in self.documents[doc_id]:
-                    self.documents[doc_id]["bert_cut"] = self.tokenizer.tokenize(self.documents[doc_id]["context"])
 
                 text_b = self.documents[doc_id]["bert_cut"]
                 inp_seq = ["[CLS]"] + text_a + ["[SEP]"] + text_b + ["[SEP]"]
@@ -136,15 +137,15 @@ class BertReader(BaseReader):
                 if "doc_id" in query:
                     if doc_id == query["doc_id"]:
                         # [CLS]+text_a+[SEP]+document
-                        start_labels.append(query_lens[-1] + query["start"])
-                        end_labels.append(query_lens[-1] + query["end"])
+                        start_labels.append(query_lens[-1] + query["start_bert"])
+                        end_labels.append(query_lens[-1] + query["end_bert"])
                     else:
                         start_labels.append(0) # [CLS]
                         end_labels.append(0) # [CLS]
 
         # 1. 生成input_ids
-        input_seqs = pad_sequence(input_seqs, '[PAD]') # 补全query到同一个长度
-        input_ids = [self.tokenizer.convert_tokens_to_ids(sq) for sq in input_seqs] # 字符token转化为词汇表里的编码id
+        pad_input_seqs = pad_sequence(input_seqs, '[PAD]') # 补全query到同一个长度
+        input_ids = [self.tokenizer.convert_tokens_to_ids(sq) for sq in pad_input_seqs] # 字符token转化为词汇表里的编码id
         input_ids = to_torch(np.array(input_ids),use_gpu=self.config.use_gpu)
 
         # 2. 生成attention_mask
@@ -195,12 +196,11 @@ class BertReader(BaseReader):
             query["doc_id_pred"] = query["doc_candidates"][answer[1]][0]
 
 
-
 # Method 1: y = max_z argmax_y[ p(y|z,x) ]
 def find_best_answer(seqs, lens, start_logits, end_logits, weights=None):
     final_answer = ""
     final_doc_id = 0
-    max_prob = -np.inf
+    max_score = -np.inf
 
     # for some documents
     doc_cnt = -1
@@ -208,24 +208,23 @@ def find_best_answer(seqs, lens, start_logits, end_logits, weights=None):
 
         doc_cnt += 1
         # for one document
-        span, max_score = (0,0), -np.inf
-        for i in range(length, len(seq)):
-            for j in range(i,len(seq)):
-                score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
-                if score > max_score:
-                    max_score = score
-                    span = (i, j)
-        answer = seq[span[0]:span[1]+1]
-        prob = max_score
-        if prob > max_prob:
-            max_prob = prob
+        s, e = length, len(seq)-1
+        i = to_numpy(torch.argmax(start_logit[s:e-1])) + s 
+        j = to_numpy(torch.argmax(end_logit[i+1:e])) + i+1
+        answer = "".join(seq[i:j])
+        score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
+
+        # update best result
+        if score > max_score:
+            max_score = score
             final_answer = answer
             final_doc_id = doc_cnt
-    
+
     return final_answer, final_doc_id
 
 
 
+# Crazy Slow ...
 # # Method 2: y = argmax_y [ sum_z p(y|z,x)*p(z|x) ]
 # def find_best_answer(seqs, lens, start_logits, end_logits, weights):
     # """
