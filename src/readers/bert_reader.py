@@ -156,8 +156,8 @@ class BertReader(BaseReader):
         token_type_ids = to_torch(np.array(token_type_ids),use_gpu=self.config.use_gpu)
 
         # 4. 生成labels
-        start_labels = to_torch(np.stack(start_labels), use_gpu=self.config.use_gpu)
-        end_labels = to_torch(np.stack(end_labels),use_gpu=self.config.use_gpu)
+        start_labels = to_torch(np.stack(start_labels).reshape(-1,1), use_gpu=self.config.use_gpu)
+        end_labels = to_torch(np.stack(end_labels).reshape(-1,1), use_gpu=self.config.use_gpu)
 
         return input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels
 

@@ -53,7 +53,6 @@ def train(model, train_loader, val_loader, config):
         cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
         logger.info('==== Evaluating Model at {} ===='.format(cur_time))
 
-
         # Validation (loss)
         loss_retriever, loss_reader = validate(model, val_loader)
 
@@ -61,8 +60,8 @@ def train(model, train_loader, val_loader, config):
         if loss_retriever < best_loss_retriever:
             best_loss_retriever = loss_retriever 
 
-            cur_time = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
-            logger.info('*** Retriever Saved with valid_loss = {}, at {}. ***'.format(valid_loss, cur_time))
+            cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+            logger.info('*** Retriever Saved with valid_loss = {}, at {}. ***'.format(loss_retriever, cur_time))
             retriever.save(config.saved_path, epoch)
             best_epoch_retriever = epoch
             saved_models_retriever.append(epoch)
@@ -72,6 +71,18 @@ def train(model, train_loader, val_loader, config):
                 os.remove(os.path.join(config.saved_path, "{}-retriever".format(remove_model)))
 
         # Save Reader
+        if loss_reader < best_loss_reader:
+            best_loss_reader = loss_reader 
+
+            cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+            logger.info('*** reader Saved with valid_loss = {}, at {}. ***'.format(loss_reader, cur_time))
+            reader.save(config.saved_path, epoch)
+            best_epoch_reader = epoch
+            saved_models_reader.append(epoch)
+            if len(saved_models_reader) > last_n_model:
+                remove_model = saved_models_reader[0]
+                saved_models_reader = saved_models_reader[-last_n_model:]
+                os.remove(os.path.join(config.saved_path, "{}-reader".format(remove_model)))
 
 
 
@@ -110,6 +121,11 @@ def validate(model, data_loader):
 
 
     # TODO: save badcase
+
+    num_batch = len(data_loader)
+    loss_retriever /= float(num_batch)
+    loss_reader /= float(num_batch)
+
     # YZ: calculate mean right now. Analyss badcase later
     for k,v in metric_retriever.items():
         metric_retriever[k] = np.mean(v)
