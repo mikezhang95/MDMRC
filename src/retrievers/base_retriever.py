@@ -73,7 +73,7 @@ class BaseRetriever(torch.nn.Module):
                 p = doc_order.index(query['doc_id'])
                 if p >= topk:
                     e = doc_scores.pop(p)
-                    doc_scores.insert(e, 0)
+                    doc_scores.insert(0, e)
 
             selected_docs = doc_scores[:topk]
             query["doc_candidates"] = selected_docs
