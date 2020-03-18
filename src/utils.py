@@ -128,3 +128,10 @@ def cost(func):
         return ret
     return wrapper
 
+
+def find_best_model(saved_path):
+    retriever_models = sorted([int(p.replace('-retriever', '')) for p in os.listdir(saved_path) if 'retriever' in p])
+    reader_models = sorted([int(p.replace('-reader', '')) for p in os.listdir(saved_path) if 'reader' in p])
+    # best_epoch = (retriever_models[-1], reader_modes[-1])
+    best_epoch = (retriever_models[-1], reader_models[-1])
+    return best_epoch

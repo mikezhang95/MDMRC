@@ -172,7 +172,7 @@ def generate(model, data_loader, f):
             answer = query["answer_pred"]
             lines.append("%s\t%s\t%s\n"%(qid, docid, answer))
 
-    f.write(lines)
+    f.write("".join(lines))
 
     logger.info('--- Generation Done ---')
     return 

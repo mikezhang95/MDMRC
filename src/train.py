@@ -17,13 +17,12 @@ import argparse
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../'
 sys.path.append(os.path.join(BASE_DIR, "src"))
 
-from utils import Pack, prepare_dirs_loggers, set_seed
+from utils import *
 from data_loader import load_data, get_data_loader
 from task import  train, validate, generate
 
 import retrievers
 import readers
-
 
 
 # arguments
@@ -43,19 +42,13 @@ config["forward_only"] = args.forward_only
 # set random_seed/logger/save_path
 set_seed(config.random_seed)
 stats_path = BASE_DIR + 'outputs/'
-if config.forward_only:
-    saved_path = os.path.join(stats_path, config.pretrain_folder)
-    config = Pack(json.load(open(os.path.join(saved_path, 'config.json'))))
-    config['forward_only'] = True
-else:
-    alias = args.alias
-    if alias != "" :
-        alias = '-' + alias
-    saved_path = os.path.join(stats_path, args.config_name + alias)
-    if not os.path.exists(saved_path):
-        os.makedirs(saved_path)
+alias = args.alias if args.alias == "" else '-'+ args.alias
+saved_path = os.path.join(stats_path, args.config_name + alias)
+if not os.path.exists(saved_path):
+    os.makedirs(saved_path)
 config.saved_path = saved_path
 prepare_dirs_loggers(config)
+
 
 # start logger
 logger = logging.getLogger()
@@ -75,6 +68,7 @@ train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_s
 test_loader, _ = get_data_loader(test_data, batch_size=config.batch_size, split_ratio=0.0)
 config["num_samples"]= len(train_data)
 
+
 # create model
 retriever_class = getattr(retrievers, config.retriever_name)
 retriever = retriever_class(documents, config)
@@ -84,6 +78,12 @@ if config.use_gpu:
     retriever = retriever.cuda()
     reader = reader.cuda()
 model = (retriever, reader)
+# load pretrain model before training
+if not config.forward_only and config.pretrain_folder != "":
+    pretrain_path = os.path.join(stats_path, config.pretrain_folder)
+    best_epoch = find_best_model(pretrain_path)
+    retriever.load(pretrain_path, best_epoch[0])
+    reader.load(pretrain_path, best_epoch[1])
 
 ##################### Training #####################
 best_epoch = None
@@ -92,13 +92,9 @@ if not config.forward_only:
         best_epoch = train(model, train_loader, val_loader, config)
     except KeyboardInterrupt:
         logger.error('Training stopped by keyboard.')
-if best_epoch is None:
-    retriever_models = sorted([int(p.replace('-retriever', '')) for p in os.listdir(saved_path) if 'retriever' in p])
-    reader_models = sorted([int(p.replace('-reader', '')) for p in os.listdir(saved_path) if 'reader' in p])
-    # best_epoch = (retriever_models[-1], reader_modes[-1])
-    best_epoch = (retriever_models[-1], reader_models[-1])
 
 # load best model
+best_epoch = find_best_model(saved_path)
 retriever.load(saved_path, best_epoch[0])
 reader.load(saved_path, best_epoch[1])
 logger.info("$$$ Load {}-model $$$".format(best_epoch))
@@ -109,7 +105,8 @@ logger.info("$$$ Load {}-model $$$".format(best_epoch))
 
 ##################### Generation #####################
 logger.info("\n***** Generation on TEST *****")
-with open(os.path.join(saved_path, '{}_prediction.csv'.format(best_epoch)), 'w') as f:
+best_epoch = "-".join(list(best_epoch))
+with open(os.path.join(saved_path, '{}-prediction.csv'.format(best_epoch)), 'w') as f:
     generate(model, test_loader, f)
 
 end_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
