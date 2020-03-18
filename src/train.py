@@ -107,7 +107,7 @@ logger.info("$$$ Load {}-model $$$".format(best_epoch))
 
 ##################### Generation #####################
 logger.info("\n***** Generation on TEST *****")
-best_epoch = "-".join(list(best_epoch))
+best_epoch = "%s-%s"%(best_epoch[0], best_epoch[1])
 with open(os.path.join(saved_path, '{}-prediction.csv'.format(best_epoch)), 'w') as f:
     generate(model, test_loader, f)
 

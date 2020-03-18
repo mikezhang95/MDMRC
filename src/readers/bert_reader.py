@@ -27,6 +27,9 @@ class BertReader(BaseReader):
         if use_bert:
             self.bert = BertModel.from_pretrained(self.bert_dir)
 
+        # init other parts/ depends on self.bert
+        self.init_network()
+
         # init tokenizer
         vocab_file = self.bert_dir + "vocab.txt"
         self.tokenizer = BertTokenizer(vocab_file)
