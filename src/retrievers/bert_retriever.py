@@ -11,37 +11,51 @@ from retrievers import BaseRetriever
 from metrics import *
 from utils import *
 
+MAX_LEN=100 # TODO: hardcode
+
 class BertRetriever(BaseRetriever):
 
-    def __init__(self, documents, config):
+    def __init__(self, documents, config, use_bert=True):
         super().__init__(documents, config)
 
-        self.init_network()
-    
-        # init tokenizer
         self.bert_dir = BASE_DIR + self.config.bert_dir
+        if use_bert:
+            self.init(use_bert=True)
+
+
+    def init(self, use_bert=True):
+
+        # create bert or not(already has albert)
+        if use_bert:
+            self.bert = BertModel.from_pretrained(self.bert_dir)
+
+        # init other parts/ depends on self.bert
+        self.init_network()
+
+        # init tokenizer
         vocab_file = self.bert_dir + "vocab.txt"
         self.tokenizer = BertTokenizer(vocab_file)
 
         # init optimzier
         lr = self.config.lr
         self.optimizer = AdamW(self.parameters(), lr=lr, correct_bias=False)
-        num_training_steps = config.num_epoch * config.num_samples / config.batch_size
+        num_training_steps = self.config.num_epoch * self.config.num_samples / self.config.batch_size
         num_warmup_steps = 0
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
+        # init cuda
+        if self.config.use_gpu:
+            self.cuda()
+
+        # create embeddings for all documents
         self.init_doc_embedding()
 
-
-    
 
     def init_network(self):
         # dropout part
         self.dropout = Dropout(self.config.dropout)
 
         # bert part
-        bert_dir = BASE_DIR + self.config.bert_dir
-        self.bert = BertModel.from_pretrained(bert_dir)
         bert_config = self.bert.config
         bert_hidden = bert_config.hidden_size # 768
 
@@ -50,22 +64,17 @@ class BertRetriever(BaseRetriever):
         self.query_layer = Linear(bert_hidden, query_emb, bias=True) 
         doc_emb = self.config.doc_emb
         self.doc_layer = Linear(bert_hidden, doc_emb, bias=True) 
-
         # activation
         self.activation = RReLU(inplace=True)
 
 
-    @cost
-    def create_input(self, queries):
+    def create_input(self, queries, max_len=None):
         """
             Returns:
                 - input_ids
                 - attention_mask
                 - token_type_ids
-                - input_seqs
-                - query_lens
-                - start_labels
-                - end_labels
+                - labels
         """
         input_seqs = []  # BERT输入序列
         attention_mask = []  #  序列mask
@@ -81,7 +90,7 @@ class BertRetriever(BaseRetriever):
 
             input_seqs.append(inp_seq)
             attention_mask.append([1] * len(inp_seq))
-            token_type.append([0]*(2+len(text_a)))
+            token_type.append([0]*len(inp_seq))
             
             if "doc_id" in query:
                 label = self.doc_list.index(query["doc_id"])
@@ -92,20 +101,20 @@ class BertRetriever(BaseRetriever):
 
         # TODO: cutoff
         # 1. 生成input_ids
-        pad_input_seqs = pad_sequence(input_seqs, '[PAD]') # 补全query到同一个长度
+        pad_input_seqs = pad_sequence(input_seqs, '[PAD]', max_len=max_len) # 补全query到同一个长度
         input_ids = [self.tokenizer.convert_tokens_to_ids(sq) for sq in pad_input_seqs] # 字符token转化为词汇表里的编码id
         input_ids = to_torch(np.array(input_ids),use_gpu=self.config.use_gpu)
 
         # 2. 生成attention_mask
-        attention_mask = pad_sequence(attention_mask)
+        attention_mask = pad_sequence(attention_mask, max_len=max_len)
         attention_mask = to_torch(np.array(attention_mask),use_gpu=self.config.use_gpu)
 
         # 3. 生成token_type_ids
-        token_type_ids = pad_sequence(token_type)
+        token_type_ids = pad_sequence(token_type, max_len=max_len)
         token_type_ids = to_torch(np.array(token_type_ids),use_gpu=self.config.use_gpu)
 
         # 4. 生成labels
-        labels = to_torch(np.stack(start_labels).reshape(-1), use_gpu=self.config.use_gpu)
+        labels = to_torch(np.stack(labels).reshape(-1), use_gpu=self.config.use_gpu)
 
         return input_ids, attention_mask, token_type_ids, labels
 
@@ -136,23 +145,29 @@ class BertRetriever(BaseRetriever):
         self.update_doc_embedding()
 
 
-
     def init_doc_embedding(self):
-
         # create bert inputs for all docs
         doc_inputs = []
         for key, doc in self.documents.items():
-            i,a,t,l = self.create_input([doc])
+            i,a,t,l = self.create_input([doc], max_len=MAX_LEN)
             doc_inputs.append((i,a,t,l))
-        self.doc_loader = DataLoader(doc_inputs, shuffle=False, batch=self.config.batch_size)
+        self.doc_loader = DataLoader(doc_inputs, shuffle=False, batch_size=self.config.batch_size)
 
         self.update_doc_embedding()
 
+    # This Consumes Too Much Storage...........
+    @cost
     def update_doc_embedding(self):
         doc_emb = []
-        for doc in self.doc_loader:
+        for i, doc in enumerate(self.doc_loader):
 
-            input_ids, attention_mask, token_type_ids = doc
+            print("{}/{}".format(i, len(self.doc_loader)))
+
+            input_ids, attention_mask, token_type_ids, _ = doc
+            input_ids = input_ids.squeeze(1)
+            attention_mask = attention_mask.squeeze(1)
+            token_type_ids = token_type_ids.squeeze(1)
+            print(input_ids.size(), attention_mask.size(), token_type_ids.size())
 
             _, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
 

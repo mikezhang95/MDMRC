@@ -96,7 +96,10 @@ def set_seed(seed):
 
 def prepare_dirs_loggers(config, script=""):
 
-    log_level = logging.INFO
+    if config.debug:
+        log_level = logging.DEBUG
+    else:
+        log_level = logging.INFO
 
     logFormatter = logging.Formatter("%(message)s")
     rootLogger = logging.getLogger()

@@ -30,6 +30,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--config_name', type=str, default="bm25_bert")
 parser.add_argument('--forward_only', action='store_true')
 parser.add_argument('--alias', type=str, default="")
+parser.add_argument('--debug', action='store_true')
 args = parser.parse_args()
 
 
@@ -37,6 +38,7 @@ args = parser.parse_args()
 config_path = BASE_DIR + "configs/" + args.config_name + ".conf"
 config = Pack(json.load(open(config_path)))
 config["forward_only"] = args.forward_only
+config["debug"] = args.debug
 
 
 # set random_seed/logger/save_path

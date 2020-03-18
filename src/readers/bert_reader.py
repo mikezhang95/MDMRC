@@ -12,24 +12,35 @@ from utils import *
 
 class BertReader(BaseReader):
 
-    def __init__(self, documents, config):
+    def __init__(self, documents, config, use_bert=True):
+
         super().__init__(documents, config)
 
-        self.init_network()
+        self.bert_dir = BASE_DIR + self.config.bert_dir
+        if use_bert:
+            self.init(use_bert=True)
     
 
+    def init(self, use_bert=True):
+
+        # create bert or not(already has albert)
+        if use_bert:
+            self.bert = BertModel.from_pretrained(self.bert_dir)
+
         # init tokenizer
-        self.bert_dir = BASE_DIR + self.config.bert_dir
         vocab_file = self.bert_dir + "vocab.txt"
         self.tokenizer = BertTokenizer(vocab_file)
 
         # init optimzier
         lr = self.config.lr
         self.optimizer = AdamW(self.parameters(), lr=lr, correct_bias=False)
-        num_training_steps = config.num_epoch * config.num_samples / config.batch_size
+        num_training_steps = self.config.num_epoch * self.config.num_samples / self.config.batch_size
         num_warmup_steps = 0
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
+        # init cuda
+        if self.config.use_gpu:
+            self.cuda()
 
     @cost
     def read(self, queries, mode="test"):
@@ -58,8 +69,6 @@ class BertReader(BaseReader):
         self.dropout = Dropout(self.config.dropout)
 
         # bert part
-        bert_dir = BASE_DIR + self.config.bert_dir
-        self.bert = BertModel.from_pretrained(bert_dir)
         bert_config = self.bert.config
         bert_hidden = bert_config.hidden_size # 768
 
