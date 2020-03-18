@@ -3,10 +3,9 @@
 """
 
 from model.modeling_albert import AlbertModel
-from readers import BertReader
+from retrievers import BertRetriever
 
-
-class AlbertReader(BertReader):
+class AlbertRetriever(BertRetriever):
 
     def __init__(self, documents, config):
 

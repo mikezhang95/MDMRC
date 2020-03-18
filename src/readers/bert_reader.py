@@ -5,7 +5,6 @@
 import torch
 from torch.nn import Dropout, Linear, RReLU
 from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup, BertModel
-from model.modeling_albert import AlbertModel
 
 from readers import BaseReader
 from metrics import *
@@ -60,8 +59,7 @@ class BertReader(BaseReader):
 
         # bert part
         bert_dir = BASE_DIR + self.config.bert_dir
-        # self.bert = BertModel.from_pretrained(bert_dir)
-        self.bert = AlbertModel.from_pretrained(bert_dir)
+        self.bert = BertModel.from_pretrained(bert_dir)
         bert_config = self.bert.config
         bert_hidden = bert_config.hidden_size # 768
 
