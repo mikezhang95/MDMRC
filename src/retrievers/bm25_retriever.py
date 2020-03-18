@@ -28,16 +28,19 @@ class BM25Retriever(BaseRetriever):
 
         logits, labels = [], []
         for query in queries:
+
             match_scores = list(self.bm25.get_scores(query['jieba_cut']))
-            logit = torch.log(to_torch(np.clip(match_scores, 1e-9, np.inf),use_gpu=self.config.use_gpu, dtype=torch.float)) # to avoid overflow
+            logit = to_torch(np.array(match_scores),use_gpu=self.config.use_gpu, dtype=torch.float) 
             logits.append(logit)
 
             if "doc_id" in query:
                 label = self.doc_list.index(query["doc_id"])
-                labels.append(to_torch(np.array(label), use_gpu=self.config.use_gpu))
+                labels.append(np.array(label))
+            else:
+                labels.append(0)
 
+        labels = to_torch(np.stack(labels).reshape(-1), use_gpu=self.config.use_gpu)
         logits = torch.stack(logits)
-        labels = torch.stack(labels)
 
         return logits, labels
 

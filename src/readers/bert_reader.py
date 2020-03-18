@@ -89,9 +89,9 @@ class BertReader(BaseReader):
         out_seq = self.dropout(out_seq) # [bs,seq_len,768]
 
         start_hidden = self.start_hidden(out_seq)
-        start_logits = self.start_head(self.activation(start_hidden))
+        start_logits = self.start_head(self.activation(start_hidden)).squeeze(-1)
         end_hidden = self.end_hidden(out_seq)
-        end_logits = self.end_head(self.activation(end_hidden))
+        end_logits = self.end_head(self.activation(end_hidden)).squeeze(-1)
 
         # start_labels, end_labels
         return start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels
@@ -134,14 +134,13 @@ class BertReader(BaseReader):
 
                 query_lens.append(2 + len(text_a))
                 # create label for training
-                if "doc_id" in query:
-                    if doc_id == query["doc_id"]:
-                        # [CLS]+text_a+[SEP]+document
-                        start_labels.append(query_lens[-1] + query["start_bert"])
-                        end_labels.append(query_lens[-1] + query["end_bert"])
-                    else:
-                        start_labels.append(0) # [CLS]
-                        end_labels.append(0) # [CLS]
+                if "doc_id" in query and doc_id == query["doc_id"]:
+                    # [CLS]+text_a+[SEP]+document
+                    start_labels.append(query_lens[-1] + query["start_bert"])
+                    end_labels.append(query_lens[-1] + query["end_bert"])
+                else:
+                    start_labels.append(0) # [CLS]
+                    end_labels.append(0) # [CLS]
 
         # 1. 生成input_ids
         pad_input_seqs = pad_sequence(input_seqs, '[PAD]') # 补全query到同一个长度
@@ -157,8 +156,10 @@ class BertReader(BaseReader):
         token_type_ids = to_torch(np.array(token_type_ids),use_gpu=self.config.use_gpu)
 
         # 4. 生成labels
-        start_labels = to_torch(np.stack(start_labels).reshape(-1,1), use_gpu=self.config.use_gpu)
-        end_labels = to_torch(np.stack(end_labels).reshape(-1,1), use_gpu=self.config.use_gpu)
+        start_labels = to_torch(np.stack(start_labels).reshape(-1), use_gpu=self.config.use_gpu)
+        end_labels = to_torch(np.stack(end_labels).reshape(-1), use_gpu=self.config.use_gpu)
+        # start_labels = to_torch(np.stack(start_labels).reshape(-1,1), use_gpu=self.config.use_gpu)
+        # end_labels = to_torch(np.stack(end_labels).reshape(-1,1), use_gpu=self.config.use_gpu)
 
         return input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels
 

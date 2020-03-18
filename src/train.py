@@ -19,7 +19,7 @@ sys.path.append(os.path.join(BASE_DIR, "src"))
 
 from utils import Pack, prepare_dirs_loggers, set_seed
 from data_loader import load_data, get_data_loader
-from task import  train, validate
+from task import  train, validate, generate
 
 import retrievers
 import readers
@@ -72,6 +72,7 @@ with open(os.path.join(saved_path, 'config.json'), 'w') as f:
 train_data, test_data, documents = load_data(config)
 # split dataset into train/val 4:1
 train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2)
+test_loader, _ = get_data_loader(test_data, batch_size=config.batch_size, split_ratio=0.0)
 config["num_samples"]= len(train_data)
 
 # create model
@@ -100,18 +101,16 @@ if best_epoch is None:
 # load best model
 retriever.load(saved_path, best_epoch[0])
 reader.load(saved_path, best_epoch[1])
-
-
-##################### Validation #####################
-logger.info("\n***** Evaluation on VAL *****")
 logger.info("$$$ Load {}-model $$$".format(best_epoch))
-validate(model, val_loader)
 
-# ##################### Generation #####################
-# # TODO: support write into files
+# ##################### Validation #####################
+# logger.info("\n***** Evaluation on VAL *****")
+# validate(model, val_loader)
 
-# with open(os.path.join(saved_path, '{}_test_file.txt'.format(best_epoch)), 'w') as f:
-    # generate(model, test_data, config, evaluator, dest_f=f)
+##################### Generation #####################
+logger.info("\n***** Generation on TEST *****")
+with open(os.path.join(saved_path, '{}_prediction.csv'.format(best_epoch)), 'w') as f:
+    generate(model, test_loader, f)
 
 end_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
 logger.info('[END]\n' + end_time)

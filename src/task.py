@@ -87,6 +87,7 @@ def train(model, train_loader, val_loader, config):
 
 
 
+
     logger.info("Training Ends.\n Best Validation Loss: \
             - Retriever {:.4f} at Epcoh {}\n  \
             - Reader {:.4f} at Epoch {}".format(best_loss_retriever, best_epoch_retriever,best_loss_reader, best_epoch_reader))
@@ -122,6 +123,7 @@ def validate(model, data_loader):
 
         ### calculate bleu/f1/rouge
         metric2 = reader.collect_metric(batch)
+        merge_dict(metric_reader, metric2)
 
     # TODO: save badcase
 
@@ -144,18 +146,36 @@ def validate(model, data_loader):
     return loss_retriever, loss_reader
 
 
-def generate(model, data_loader):
+def generate(model, data_loader, f):
+
+    f.write("id\tdocid\tanswer\n")
+    lines = []
+
     # models
     retriever, reader = model
-    retrieve.eval()
-    # reader.eval()
+    retriever.eval()
+    reader.eval()
 
-    for batch in data_loader:
-        retriever.predict(batch) # generate doc candidates
-        answer = reader.predict(batch) # generate answer
+    for i, batch in enumerate(data_loader):
 
-    write_result()
-    return
+        logger.info("Batch {}/{}".format(i, len(data_loader)))
+
+        # 1. retriever forward
+        _ =  retriever.retrieve(batch, mode="test")
+
+        # 2. retriever forward
+        _ = reader.read(batch, mode="test")
+
+        for query in batch:
+            qid = query["question_id"]
+            docid = query["doc_id_pred"].split("-")[0]
+            answer = query["answer_pred"]
+            lines.append("%s\t%s\t%s\n"%(qid, docid, answer))
+
+    f.write(lines)
+
+    logger.info('--- Generation Done ---')
+    return 
 
 
 # def pre_train():
