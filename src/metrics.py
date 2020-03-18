@@ -15,8 +15,7 @@ def to_tokens(string):
         string or list to be processed
     """
     if not isinstance(string, list):
-        # TODO: jieba here or at preprocessing
-        string_tokens = string.split()
+        string_tokens = list(string)
     else:
         string_tokens = string
     return string_tokens
@@ -71,10 +70,7 @@ def topk_fn(order_list, label, topk):
     return result
 
 def rouge_fn(hypothesis, reference):
-    reference_tokens = "".join(to_tokens(reference))
-    hypothesis_tokens = "".join(to_tokens(hypothesis))
+    reference_tokens = " ".join(to_tokens(reference))
+    hypothesis_tokens = " ".join(to_tokens(hypothesis))
     scores = rouge.get_scores(hypothesis_tokens, reference_tokens)
     return scores[0]["rouge-l"]["f"]
-
-
-
