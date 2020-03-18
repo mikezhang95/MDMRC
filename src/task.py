@@ -86,11 +86,9 @@ def train(model, train_loader, val_loader, config):
                 os.remove(os.path.join(config.saved_path, "{}-reader".format(remove_model)))
 
 
-
-
-    logger.info("Training Ends.\n Best Validation Loss: \
+    logger.info("Training Ends.\nBest Validation Loss:\n \
             - Retriever {:.4f} at Epcoh {}\n  \
-            - Reader {:.4f} at Epoch {}".format(best_loss_retriever, best_epoch_retriever,best_loss_reader, best_epoch_reader))
+            - Reader {:.4f} at Epoch {}\n".format(best_loss_retriever, best_epoch_retriever,best_loss_reader, best_epoch_reader))
  
     return best_epoch_retriever, best_epoch_reader
 
