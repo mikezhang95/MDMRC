@@ -22,7 +22,7 @@ class GoldReader(BaseReader):
             if doc_id == query["doc_id"]:
                 query["answer_pred"] = query["answer"]
             else:
-                query["answer_pred"] = ""
+                query["answer_pred"] = "错误"
 
         loss = to_torch(np.array(0), use_gpu=self.config.use_gpu, dtype=torch.float)
         return loss

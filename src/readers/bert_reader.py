@@ -105,6 +105,11 @@ class BertReader(BaseReader):
         end_hidden = self.end_hidden(out_seq)
         end_logits = self.end_head(self.activation(end_hidden)).squeeze(-1)
 
+        # do mask on sequencese
+        seq_mask = ~attention_mask.bool()
+        start_logits = start_logits.masked_fill(seq_mask, -1e6)
+        end_logits = end_logits.masked_fill(seq_mask, -1e6)
+
         # start_labels, end_labels
         return start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels
 
@@ -223,6 +228,7 @@ class BertReader(BaseReader):
 
             query["doc_id_pred"] = doc_id
             query["answer_pred"] = orig_seq[tok_to_orig_index[span[0]]:tok_to_orig_index[span[1]]]
+
             
 
 
