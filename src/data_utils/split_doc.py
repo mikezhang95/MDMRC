@@ -66,9 +66,9 @@ def correct_label(train_data, documents, paragraphs):
                 data['doc_id'] = paragraph_id
                 data['start']= start
                 data['end'] = end
-                # create speical label for bert
-                data['start_bert'] = len(t.tokenize(context[:start]))
-                data['end_bert'] = len(t.tokenize(context[:end]))
+                # # create speical label for bert
+                # data['start_bert'] = len(t.tokenize(context[:start]))
+                # data['end_bert'] = len(t.tokenize(context[:end]))
                 break
         
         if "start" not in data:

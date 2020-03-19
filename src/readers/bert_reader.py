@@ -10,6 +10,8 @@ from readers import BaseReader
 from metrics import *
 from utils import *
 
+Q_LEN = 100
+
 class BertReader(BaseReader):
 
     def __init__(self, documents, config, use_bert=True):
@@ -119,8 +121,8 @@ class BertReader(BaseReader):
                 - start_labels
                 - end_labels
         """
-        input_seqs = []  # 输入序列
-        attention_mask = []  #  序列mask
+        input_seqs = []  # bert input sequence 
+        attention_mask = []  #  attention mask
         token_type = []  # sentence A/B
         query_lens = [] # length of [CLS] + text_a + [SEP]
 
@@ -128,26 +130,32 @@ class BertReader(BaseReader):
         start_labels, end_labels = [], []
 
         for query in queries:
-
             text_a = query["bert_cut"]
+            if len(text_a) > Q_LEN :
+                text_a = text_a[:Q_LEN]
 
-            docs = query["doc_candidates"] 
-            for doc in docs: 
+            for candidate in query["doc_candidates"] :
 
-                doc_id, doc_score = doc
+                doc_id, doc_score = candidate
+                doc = self.documents[doc_id]
+                text_b = doc["bert_cut"]
 
-                text_b = self.documents[doc_id]["bert_cut"]
+                # bert inputs
                 inp_seq = ["[CLS]"] + text_a + ["[SEP]"] + text_b + ["[SEP]"]
                 input_seqs.append(inp_seq)
                 attention_mask.append([1] * len(inp_seq))
                 token_type.append([0]*(2+len(text_a)) + [1]*(1+len(text_b)))
 
+                # for predict
+                orig_to_tok_index = doc["orig_to_tok_index"]
                 query_lens.append(2 + len(text_a))
+
                 # create label for training
                 if "doc_id" in query and doc_id == query["doc_id"]:
-                    # [CLS]+text_a+[SEP]+document
-                    start_labels.append(query_lens[-1] + query["start_bert"])
-                    end_labels.append(query_lens[-1] + query["end_bert"])
+                    # start_labels.append(query_lens[-1] + query["start_bert"])
+                    # end_labels.append(query_lens[-1] + query["end_bert"])
+                    start_labels.append(query_lens[-1] + orig_to_tok_index[query["start"]])
+                    end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"]])
                 else:
                     start_labels.append(0) # [CLS]
                     end_labels.append(0) # [CLS]
@@ -168,8 +176,6 @@ class BertReader(BaseReader):
         # 4. 生成labels
         start_labels = to_torch(np.stack(start_labels).reshape(-1), use_gpu=self.config.use_gpu)
         end_labels = to_torch(np.stack(end_labels).reshape(-1), use_gpu=self.config.use_gpu)
-        # start_labels = to_torch(np.stack(start_labels).reshape(-1,1), use_gpu=self.config.use_gpu)
-        # end_labels = to_torch(np.stack(end_labels).reshape(-1,1), use_gpu=self.config.use_gpu)
 
         return input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels
 
@@ -191,47 +197,54 @@ class BertReader(BaseReader):
                 - "answer_pred"
                 - "doc_id_pred"
         """
+
         i = 0
         for query in queries:
 
             num = len(query["doc_candidates"])
-
             start_logit = start_logits[i:i+num]
             end_logit = end_logits[i:i+num]
-            input_seq = input_seqs[i:i+num]
             query_len = query_lens[i:i+num]
+            # input_seq = input_seqs[i:i+num]
             i += num
 
-            answer = find_best_answer(input_seq, query_len, start_logit, end_logit)
-            query["answer_pred"] = answer[0]
-            query["doc_id_pred"] = query["doc_candidates"][answer[1]][0]
+            span, doc_cnt = find_best_answer(query_len, start_logit, end_logit)
+            doc_id = query["doc_candidates"][doc_cnt]
+            doc = self.documents[doc_id]
+            tok_to_orig_index = doc["tok_to_orig_index"]
+            orig_seq = doc["context"]
+
+            query["doc_id_pred"] = doc_id
+            query["answer_pred"] = orig_seq[tok_to_orig_index[span[0]]:tok_to_orig_index[span[1]]]
+            
 
 
 # Method 1: y = max_z argmax_y[ p(y|z,x) ]
-def find_best_answer(seqs, lens, start_logits, end_logits, weights=None):
-    final_answer = ""
-    final_doc_id = 0
-    max_score = -np.inf
+def find_best_answer(query_lens, start_logits, end_logits, weights=None):
+
+    best_span = (0, 0)
+    best_score = -np.inf
+    best_doc = 0
 
     # for some documents
     doc_cnt = -1
-    for seq, length, start_logit, end_logit in zip(seqs, lens, start_logits, end_logits):
+    for length, start_logit, end_logit in zip(query_lens, start_logits, end_logits):
 
         doc_cnt += 1
         # for one document
-        s, e = length, len(seq)-1
-        i = to_numpy(torch.argmax(start_logit[s:e-1])) + s 
-        j = to_numpy(torch.argmax(end_logit[i+1:e])) + i+1
-        answer = "".join(seq[i:j])
+        s = length
+        i = to_numpy(torch.argmax(start_logit[s:-1])) + s 
+        j = to_numpy(torch.argmax(end_logit[i+1:-1])) + i+1
+        span = (i-s,j-s)
         score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
 
         # update best result
-        if score > max_score:
-            max_score = score
-            final_answer = answer
-            final_doc_id = doc_cnt
+        if score > best_score:
+            best_score = score
+            best_span = span 
+            best_doc = doc_cnt
 
-    return final_answer, final_doc_id
+    return best_span, best_doc
 
 
 
