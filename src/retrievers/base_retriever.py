@@ -38,7 +38,6 @@ class BaseRetriever(torch.nn.Module):
 
         return loss
 
-
     def compute_loss(self, logits, labels):
         """
                 - "doc_logit": a torch tensor

@@ -127,14 +127,17 @@ class BertRetriever(BaseRetriever):
         input_ids, attention_mask, token_type_ids, labels = self.create_input(queries)
 
         # batch_size = real_batch_size * candidate_num
-        _, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
+        seqs, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
 
-        # TODO: make sure this is [CLS]
+        # use pooled_output of [CLS]'s last hidden state
+        # pooled_output = seqs[:, 0]
+
         pooled_output = self.dropout(pooled_output) # [bs,768]
+        query_emb = self.query_layer(pooled_output)  # [bs, 100]
 
-        query = self.query_layer(pooled_output)  # [bs, 100]
+        doc_emb = self.doc_layer(self.dropout(self.doc_bert_output))
 
-        logits = torch.matmul(query_emb, self.doc_emb.transpose(0,1)) # [bs, ds]
+        logits = torch.matmul(query_emb, doc_emb.transpose(0,1)) # [bs, ds]
         return logits, labels
 
 
@@ -142,6 +145,8 @@ class BertRetriever(BaseRetriever):
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
+        
+        # maybe its useful to update 
         # self.update_doc_embedding()
 
 
@@ -156,21 +161,21 @@ class BertRetriever(BaseRetriever):
         self.update_doc_embedding()
 
 
-    # This Consumes Too Much Storage...........
+    # save embedding takas too much space, we can only detach the gradients and cant update embedding
     @cost
     def update_doc_embedding(self):
-        doc_emb = []
+
+        doc_bert = []
         for i, doc in enumerate(self.doc_loader):
-            print("{}/{}".format(i, len(self.doc_loader)))
             input_ids, attention_mask, token_type_ids, _ = doc
             input_ids = input_ids.squeeze(1)
             attention_mask = attention_mask.squeeze(1)
             token_type_ids = token_type_ids.squeeze(1)
 
             _, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
-            pooled_output = self.dropout(pooled_output) # [bs,768]
-            emb = self.doc_layer(pooled_output).detach()  # [bs, 100]
-            self.doc_emb.append(emb)
+            # pooled_output = self.dropout(pooled_output) # [bs,768]
+            # emb = self.doc_layer(pooled_output).detach()  # [bs, 100]
+            doc_bert.append(pooled_output.detach())
 
-        self.doc_emb = torch.cat(doc_emb, dim=0) # [ds, 100]
+        self.doc_bert_output = torch.cat(doc_bert, dim=0) # [ds, 100]
     

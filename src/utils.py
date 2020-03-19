@@ -21,7 +21,7 @@ def merge_dict(dict_old, dict_new):
 
 
 def to_numpy(tensor):
-    return tensor.cpu().numpy()
+    return tensor.detach().cpu().numpy()
 
 def to_torch(array, use_gpu=False, dtype=torch.long):
     tensor = torch.from_numpy(array).to(dtype)
