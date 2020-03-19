@@ -109,7 +109,6 @@ class BertReader(BaseReader):
         return start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels
 
 
-    @cost
     def create_input(self, queries):
         """
             Returns:
@@ -155,7 +154,13 @@ class BertReader(BaseReader):
                     # start_labels.append(query_lens[-1] + query["start_bert"])
                     # end_labels.append(query_lens[-1] + query["end_bert"])
                     start_labels.append(query_lens[-1] + orig_to_tok_index[query["start"]])
-                    end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"]])
+                    try:
+                        end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"]])
+                    except:
+                        print(len(doc["context"]),len(doc["bert_cut"]))
+                        print(query["start"], query["end"], doc)
+                        raise NotImplementedError
+
                 else:
                     start_labels.append(0) # [CLS]
                     end_labels.append(0) # [CLS]
@@ -205,11 +210,13 @@ class BertReader(BaseReader):
             start_logit = start_logits[i:i+num]
             end_logit = end_logits[i:i+num]
             query_len = query_lens[i:i+num]
-            # input_seq = input_seqs[i:i+num]
+            input_seq = input_seqs[i:i+num]
             i += num
 
+            # find best span according to the logit 
             span, doc_cnt = find_best_answer(query_len, start_logit, end_logit)
-            doc_id = query["doc_candidates"][doc_cnt]
+
+            doc_id = query["doc_candidates"][doc_cnt][0]
             doc = self.documents[doc_id]
             tok_to_orig_index = doc["tok_to_orig_index"]
             orig_seq = doc["context"]
@@ -233,8 +240,8 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
         doc_cnt += 1
         # for one document
         s = length
-        i = to_numpy(torch.argmax(start_logit[s:-1])) + s 
-        j = to_numpy(torch.argmax(end_logit[i+1:-1])) + i+1
+        i = to_numpy(torch.argmax(start_logit[s:])) + s 
+        j = to_numpy(torch.argmax(end_logit[i+1:])) + i+1
         span = (i-s,j-s)
         score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
 

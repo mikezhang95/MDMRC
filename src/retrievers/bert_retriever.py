@@ -142,7 +142,7 @@ class BertRetriever(BaseRetriever):
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
-        self.update_doc_embedding()
+        # self.update_doc_embedding()
 
 
     def init_doc_embedding(self):
@@ -155,24 +155,22 @@ class BertRetriever(BaseRetriever):
 
         self.update_doc_embedding()
 
+
     # This Consumes Too Much Storage...........
     @cost
     def update_doc_embedding(self):
         doc_emb = []
         for i, doc in enumerate(self.doc_loader):
-
             print("{}/{}".format(i, len(self.doc_loader)))
-
             input_ids, attention_mask, token_type_ids, _ = doc
             input_ids = input_ids.squeeze(1)
             attention_mask = attention_mask.squeeze(1)
             token_type_ids = token_type_ids.squeeze(1)
-            print(input_ids.size(), attention_mask.size(), token_type_ids.size())
 
             _, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
-
             pooled_output = self.dropout(pooled_output) # [bs,768]
-            doc_emb.append(self.doc_layer(pooled_output))  # [bs, 100]
+            emb = self.doc_layer(pooled_output).detach()  # [bs, 100]
+            self.doc_emb.append(emb)
 
         self.doc_emb = torch.cat(doc_emb, dim=0) # [ds, 100]
     

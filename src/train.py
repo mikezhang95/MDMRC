@@ -101,9 +101,9 @@ retriever.load(saved_path, best_epoch[0])
 reader.load(saved_path, best_epoch[1])
 logger.info("$$$ Load {}-model $$$".format(best_epoch))
 
-# ##################### Validation #####################
-# logger.info("\n***** Evaluation on VAL *****")
-# validate(model, val_loader)
+##################### Validation #####################
+logger.info("\n***** Evaluation on VAL *****")
+validate(model, val_loader)
 
 ##################### Generation #####################
 logger.info("\n***** Generation on TEST *****")
