@@ -62,7 +62,7 @@ def correct_label(train_data, documents, paragraphs):
             # TODO: we only considers the first satisfied label
             if len(start_ids)>0:
                 start = start_ids[0]
-                end = start + len(answer)
+                end = start + len(answer) # query[start:end] 
                 data['doc_id'] = paragraph_id
                 data['start']= start
                 data['end'] = end

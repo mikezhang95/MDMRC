@@ -33,9 +33,12 @@ def clean_text(datas):
                     tok_to_orig_index.append(i)
                     bert_tokens.append(sub_token)
 
-
         assert len(orig_to_tok_index) == len(orig_tokens)
         assert len(tok_to_orig_index) == len(bert_tokens)
+
+        # add end symbol
+        orig_to_tok_index.append(orig_to_tok_index[-1]+1)
+        tok_to_orig_index.append(tok_to_orig_index[-1]+1)
 
         data['bert_cut'] = bert_tokens
         data['orig_to_tok_index'] = orig_to_tok_index

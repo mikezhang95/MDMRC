@@ -35,7 +35,7 @@ class BaseReader(torch.nn.Module):
                 - answer
                 - answer_pred
         """
-        metric_result = {"bleu":[], "f1":[], "rouge":[]}
+        metric_result = {"bleu":[], "f1":[], "rouge":[], "top1":[]}
 
         # bleu/rouge/f1
         for query in queries:
@@ -47,9 +47,12 @@ class BaseReader(torch.nn.Module):
             metric_result["bleu"].append(bleu_fn(answer_pred, answer_gt))
             metric_result["f1"].append(f1_fn(answer_pred, answer_gt)[2])
             metric_result["rouge"].append(rouge_fn(answer_pred, answer_gt))
+            if query["doc_id_pred"] == query["doc_id"]:
+                metric_result["top1"].append(1)
+            else:
+                metric_result["top1"].append(0)
 
         return metric_result
-
  
 
 # YZ: For a reader, only needs to write this two function

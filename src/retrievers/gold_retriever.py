@@ -22,7 +22,7 @@ class GoldRetriever(BaseRetriever):
         for query in queries:
             match_scores = [0.0] * len(self.doc_list)
             match_scores[self.doc_list.index(query["doc_id"])] = 1.0
-            logit = torch.log(to_torch(np.clip(match_scores, 1e-9, np.inf),use_gpu=self.config.use_gpu, dtype=torch.float)) # to avoid overflow
+            logit = to_torch(np.array(match_scores),use_gpu=self.config.use_gpu, dtype=torch.float) 
             logits.append(logit)
 
             if "doc_id" in query:

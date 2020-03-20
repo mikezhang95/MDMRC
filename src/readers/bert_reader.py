@@ -105,11 +105,15 @@ class BertReader(BaseReader):
         end_hidden = self.end_hidden(out_seq)
         end_logits = self.end_head(self.activation(end_hidden)).squeeze(-1)
 
+        # do mask on sequencese
+        seq_mask = ~attention_mask.bool()
+        start_logits = start_logits.masked_fill(seq_mask, -1e6)
+        end_logits = end_logits.masked_fill(seq_mask, -1e6)
+
         # start_labels, end_labels
         return start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels
 
 
-    @cost
     def create_input(self, queries):
         """
             Returns:
@@ -155,7 +159,13 @@ class BertReader(BaseReader):
                     # start_labels.append(query_lens[-1] + query["start_bert"])
                     # end_labels.append(query_lens[-1] + query["end_bert"])
                     start_labels.append(query_lens[-1] + orig_to_tok_index[query["start"]])
-                    end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"]])
+                    try:
+                        end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"]])
+                    except:
+                        print(len(doc["context"]),len(doc["bert_cut"]))
+                        print(query["start"], query["end"], doc)
+                        raise NotImplementedError
+
                 else:
                     start_labels.append(0) # [CLS]
                     end_labels.append(0) # [CLS]
@@ -205,17 +215,20 @@ class BertReader(BaseReader):
             start_logit = start_logits[i:i+num]
             end_logit = end_logits[i:i+num]
             query_len = query_lens[i:i+num]
-            # input_seq = input_seqs[i:i+num]
+            input_seq = input_seqs[i:i+num]
             i += num
 
+            # find best span according to the logit 
             span, doc_cnt = find_best_answer(query_len, start_logit, end_logit)
-            doc_id = query["doc_candidates"][doc_cnt]
+
+            doc_id = query["doc_candidates"][doc_cnt][0]
             doc = self.documents[doc_id]
             tok_to_orig_index = doc["tok_to_orig_index"]
             orig_seq = doc["context"]
 
             query["doc_id_pred"] = doc_id
             query["answer_pred"] = orig_seq[tok_to_orig_index[span[0]]:tok_to_orig_index[span[1]]]
+
             
 
 
@@ -234,7 +247,7 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
         # for one document
         s = length
         i = to_numpy(torch.argmax(start_logit[s:-1])) + s 
-        j = to_numpy(torch.argmax(end_logit[i+1:-1])) + i+1
+        j = to_numpy(torch.argmax(end_logit[i+1:])) + i+1
         span = (i-s,j-s)
         score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
 
