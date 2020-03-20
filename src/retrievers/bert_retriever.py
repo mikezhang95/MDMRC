@@ -11,7 +11,8 @@ from retrievers import BaseRetriever
 from metrics import *
 from utils import *
 
-MAX_LEN=100 # TODO: hardcode
+DOC_LEN = 300 # TODO: hardcode
+TOPK = 3
 
 class BertRetriever(BaseRetriever):
 
@@ -25,7 +26,7 @@ class BertRetriever(BaseRetriever):
 
     def init(self, use_bert=True):
 
-        # create bert or not(already has albert)
+        # create bert or not(if already has albert)
         if use_bert:
             self.bert = BertModel.from_pretrained(self.bert_dir)
 
@@ -52,20 +53,19 @@ class BertRetriever(BaseRetriever):
 
 
     def init_network(self):
+
         # dropout part
-        self.dropout = Dropout(self.config.dropout)
+        self.dropout = Dropout(self.config.dropout, inplace=True)
+        # activation
+        self.activation = RReLU(inplace=True)
 
         # bert part
         bert_config = self.bert.config
         bert_hidden = bert_config.hidden_size # 768
 
         # head part
-        query_emb = self.config.query_emb
-        self.query_layer = Linear(bert_hidden, query_emb, bias=True) 
-        doc_emb = self.config.doc_emb
-        self.doc_layer = Linear(bert_hidden, doc_emb, bias=True) 
-        # activation
-        self.activation = RReLU(inplace=True)
+        self.query_layer = Linear(bert_hidden, self.config.query_emb, bias=False) 
+        self.doc_layer = Linear(bert_hidden, self.config.doc_emb, bias=False) 
 
 
     def create_input(self, queries, max_len=None):
@@ -98,8 +98,6 @@ class BertRetriever(BaseRetriever):
             else:
                 labels.append(0)
 
-
-        # TODO: cutoff
         # 1. 生成input_ids
         pad_input_seqs = pad_sequence(input_seqs, '[PAD]', max_len=max_len) # 补全query到同一个长度
         input_ids = [self.tokenizer.convert_tokens_to_ids(sq) for sq in pad_input_seqs] # 字符token转化为词汇表里的编码id
@@ -129,15 +127,28 @@ class BertRetriever(BaseRetriever):
         # batch_size = real_batch_size * candidate_num
         seqs, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
 
-        # use pooled_output of [CLS]'s last hidden state
-        # pooled_output = seqs[:, 0]
-
+        # embedding for input x
+        pooled_output = seqs = seqs[:, 0]
         pooled_output = self.dropout(pooled_output) # [bs,768]
         query_emb = self.query_layer(pooled_output)  # [bs, 100]
 
-        doc_emb = self.doc_layer(self.dropout(self.doc_bert_output))
+        # embedding for document z
+        # doc_emb = self.doc_layer(self.dropout(self.doc_bert_output)) # [doc, 100]
+        doc_emb = self.doc_bert_output
 
+        # inner product
         logits = torch.matmul(query_emb, doc_emb.transpose(0,1)) # [bs, ds]
+            
+        # restore gradients for topk candidates
+        for q, logit in zip(query_emb, logits):
+            value, index = logit.topk(TOPK, largest=True)
+            for i in index:
+                inputs,a,t,l = self.doc_inputs[int(to_numpy(i))]
+                doc_bert, doc_pooled =  self.bert(inputs,token_type_ids=t, attention_mask=a)
+                doc_pooled = doc_bert = doc_bert[:, 0]
+                emb = self.doc_layer(self.dropout(doc_pooled))
+                logit[i] = torch.matmul(q.squeeze(), emb.squeeze())
+
         return logits, labels
 
 
@@ -147,17 +158,20 @@ class BertRetriever(BaseRetriever):
         self.scheduler.step()
         
         # maybe its useful to update 
-        # self.update_doc_embedding()
+        self.update_cnt += 1
+        if self.update_cnt %100 == 0: 
+            self.update_doc_embedding()
 
 
     def init_doc_embedding(self):
         # create bert inputs for all docs
-        doc_inputs = []
+        self.doc_inputs = []
         for key, doc in self.documents.items():
-            i,a,t,l = self.create_input([doc], max_len=MAX_LEN)
-            doc_inputs.append((i,a,t,l))
-        self.doc_loader = DataLoader(doc_inputs, shuffle=False, batch_size=self.config.batch_size)
+            i,a,t,l = self.create_input([doc], max_len=DOC_LEN)
+            self.doc_inputs.append((i,a,t,l))
+        self.doc_loader = DataLoader(self.doc_inputs, shuffle=False, batch_size=self.config.batch_size)
 
+        self.update_cnt = 0
         self.update_doc_embedding()
 
 
@@ -172,10 +186,11 @@ class BertRetriever(BaseRetriever):
             attention_mask = attention_mask.squeeze(1)
             token_type_ids = token_type_ids.squeeze(1)
 
-            _, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
-            # pooled_output = self.dropout(pooled_output) # [bs,768]
-            # emb = self.doc_layer(pooled_output).detach()  # [bs, 100]
-            doc_bert.append(pooled_output.detach())
+            seqs, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
+            pooled_output = seqs = seqs[:, 0]
+            pooled_output = self.dropout(pooled_output) # [bs,768]
+            pooled_output = self.doc_layer(pooled_output).detach()  # [bs, 100]
+            doc_bert.append(pooled_output)
 
         self.doc_bert_output = torch.cat(doc_bert, dim=0) # [ds, 100]
     
