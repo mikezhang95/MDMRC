@@ -246,7 +246,7 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
         doc_cnt += 1
         # for one document
         s = length
-        i = to_numpy(torch.argmax(start_logit[s:])) + s 
+        i = to_numpy(torch.argmax(start_logit[s:-1])) + s 
         j = to_numpy(torch.argmax(end_logit[i+1:])) + i+1
         span = (i-s,j-s)
         score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
