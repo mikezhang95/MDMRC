@@ -20,8 +20,7 @@ class TfidfRetriever(BaseRetriever):
         self.corpus = [] 
         for key, doc in documents.items():
             self.corpus.append(" ".join(doc["jieba_context"]))
-
-        self.tfidf = TfidfVectorizer(ngram_range=(1,2), max_features=500000)
+        self.tfidf = TfidfVectorizer(ngram_range=(1,1))
         self.corpus_vec = self.tfidf.fit_transform(self.corpus).transpose()
 
     # calculate (query, document) logit
@@ -41,7 +40,6 @@ class TfidfRetriever(BaseRetriever):
         query_vec = self.tfidf.transform(context)
         logits = to_torch((query_vec * self.corpus_vec).todense(), use_gpu=self.config.use_gpu, dtype=torch.float)
         labels = to_torch(np.stack(labels).reshape(-1), use_gpu=self.config.use_gpu)
-        print(logits.size())
 
         return logits, labels
 

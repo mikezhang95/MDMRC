@@ -28,7 +28,7 @@ def to_torch(array, use_gpu=False, dtype=torch.long):
     if use_gpu:
         tensor = tensor.cuda()
     else:
-        use_gpu = tensor.gpu()
+        use_gpu = tensor.cpu()
     return tensor
 
 def pad_sequence(seqs, pad=None, max_len=None):

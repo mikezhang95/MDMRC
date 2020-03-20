@@ -87,9 +87,6 @@ if not config.forward_only and config.pretrain_folder != "":
     retriever.load(pretrain_path, best_epoch[0])
     reader.load(pretrain_path, best_epoch[1])
 
-retriever.save(config.saved_path, 0)
-reader.save(confug.saved_path, 0)
-
 ##################### Training #####################
 best_epoch = None
 if not config.forward_only:
