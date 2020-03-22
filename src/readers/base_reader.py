@@ -46,7 +46,12 @@ class BaseReader(torch.nn.Module):
             
             metric_result["bleu"].append(bleu_fn(answer_pred, answer_gt))
             metric_result["f1"].append(f1_fn(answer_pred, answer_gt)[2])
-            metric_result["rouge"].append(rouge_fn(answer_pred, answer_gt))
+            try:
+                metric_result["rouge"].append(rouge_fn(answer_pred, answer_gt))
+            except:
+                metric_result["rouge"].append(0.0)
+                print("[Warning]Rouge Wrong: {}/{}".format(answer_pred,answer_gt))
+
             if query["doc_id_pred"] == query["doc_id"]:
                 metric_result["top1"].append(1)
             else:

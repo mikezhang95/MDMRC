@@ -10,7 +10,7 @@ from readers import BaseReader
 from metrics import *
 from utils import *
 
-Q_LEN = 100
+Q_LEN = 50
 
 class BertReader(BaseReader):
 
@@ -67,7 +67,7 @@ class BertReader(BaseReader):
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
-    
+
 
     def init_network(self):
         # dropout part
@@ -80,9 +80,11 @@ class BertReader(BaseReader):
         # head part
         head_hidden = self.config.head_hidden
         self.start_hidden = Linear(bert_hidden, head_hidden, bias=True)
-        self.start_head = Linear(head_hidden, 1, bias=True)
+        # self.start_head = Linear(head_hidden, 1, bias=True)
+        self.start_head = Linear(head_hidden, 1, bias=False)
         self.end_hidden = Linear(bert_hidden, head_hidden, bias=True) 
-        self.end_head = Linear(head_hidden, 1, bias=True)
+        # self.end_head = Linear(head_hidden, 1, bias=True)
+        self.end_head = Linear(head_hidden, 1, bias=False)
 
         # activation
         self.activation = RReLU(inplace=True)
@@ -158,8 +160,8 @@ class BertReader(BaseReader):
                 if "doc_id" in query and doc_id == query["doc_id"]:
                     # start_labels.append(query_lens[-1] + query["start_bert"])
                     # end_labels.append(query_lens[-1] + query["end_bert"])
-                    start_labels.append(query_lens[-1] + orig_to_tok_index[query["start"]])
                     try:
+                        start_labels.append(query_lens[-1] + orig_to_tok_index[query["start"]])
                         end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"]])
                     except:
                         print(len(doc["context"]),len(doc["bert_cut"]))
@@ -227,7 +229,21 @@ class BertReader(BaseReader):
             orig_seq = doc["context"]
 
             query["doc_id_pred"] = doc_id
-            query["answer_pred"] = orig_seq[tok_to_orig_index[span[0]]:tok_to_orig_index[span[1]]]
+            if span[0] == span[1]:
+                query["answer_pred"] = "null"
+            else:
+                query["answer_pred"] = orig_seq[tok_to_orig_index[span[0]]:tok_to_orig_index[span[1]]]
+
+            # try:
+                # query["answer_pred"] = orig_seq[tok_to_orig_index[span[0]]:tok_to_orig_index[span[1]]]
+            # except:
+                # print(span)
+                # print(len(orig_seq),orig_seq)
+                # print(len(input_seq[doc_cnt]),input_seq[doc_cnt])
+                # print(query_len[doc_cnt])
+                # print(len(tok_to_orig_index))
+                # print(tok_to_orig_index[-1])
+                # raise NotImplementedError
 
             
 
@@ -246,10 +262,10 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
         doc_cnt += 1
         # for one document
         s = length
-        i = to_numpy(torch.argmax(start_logit[s:-1])) + s 
-        j = to_numpy(torch.argmax(end_logit[i+1:])) + i+1
-        span = (i-s,j-s)
+        i = to_numpy(torch.argmax(start_logit[s:])) + s 
+        j = to_numpy(torch.argmax(end_logit[i:])) + i
         score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
+        span = (i-s,j-s)
 
         # update best result
         if score > best_score:
