@@ -12,7 +12,6 @@ from metrics import *
 from utils import *
 
 DOC_LEN = 200 # TODO: hardcode
-TOPK = 5
 
 class BertRetriever(BaseRetriever):
 
@@ -141,7 +140,7 @@ class BertRetriever(BaseRetriever):
             
         # restore gradients for topk candidates
         for query, q, logit in zip(queries, query_emb, logits):
-            value, index = logit.topk(TOPK, largest=True)
+            value, index = logit.topk(self.config.retriever_topk, largest=True)
             # To ease training
             if "doc_id" in query and self.training:
                 doc_index = self.doc_list.index(query["doc_id"])
