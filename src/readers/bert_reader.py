@@ -80,11 +80,11 @@ class BertReader(BaseReader):
         # head part
         head_hidden = self.config.head_hidden
         self.start_hidden = Linear(bert_hidden, head_hidden, bias=True)
-        # self.start_head = Linear(head_hidden, 1, bias=True)
-        self.start_head = Linear(head_hidden, 1, bias=False)
+        self.start_head = Linear(head_hidden, 1, bias=True)
+        # self.start_head = Linear(head_hidden, 1, bias=False)
         self.end_hidden = Linear(bert_hidden, head_hidden, bias=True) 
-        # self.end_head = Linear(head_hidden, 1, bias=True)
-        self.end_head = Linear(head_hidden, 1, bias=False)
+        self.end_head = Linear(head_hidden, 1, bias=True)
+        # self.end_head = Linear(head_hidden, 1, bias=False)
 
         # activation
         self.activation = RReLU(inplace=True)

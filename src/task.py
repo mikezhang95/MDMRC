@@ -143,7 +143,6 @@ def validate(model, data_loader):
 
 
 def generate(model, data_loader, f):
-
     f.write("id\tdocid\tanswer\n")
     lines = []
 
@@ -173,6 +172,37 @@ def generate(model, data_loader, f):
     logger.info('--- Generation Done ---')
     return 
 
+def write_retriever(model, data_loader, f):
+
+    lines = []
+
+    # models
+    retriever, reader = model
+    retriever.eval()
+
+    for i, batch in enumerate(data_loader):
+
+        logger.info("Batch {}/{}".format(i, len(data_loader)))
+
+        # 1. retriever forward
+        _ =  retriever.retrieve(batch, mode="test")
+
+
+        for query in batch:
+            output = {}
+            output["question_id"] = query["question_id"]
+            output["question"] = query["context"]
+            output["passages"] = []
+            for c in query["doc_candidates"]:
+                doc_id, doc_score = c
+                doc = retriever.documents[doc_id]
+                output["passages"].append(doc["context"])
+
+            json.dump(output, f, ensure_ascii=False)
+            f.write("\n")
+
+    logger.info('--- Write Retriever Done ---')
+    return 
 
 # def pre_train():
     # # mask words to pretrain language model

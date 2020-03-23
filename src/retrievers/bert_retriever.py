@@ -12,7 +12,7 @@ from metrics import *
 from utils import *
 
 DOC_LEN = 200 # TODO: hardcode
-TOPK = 3
+TOPK = 5
 
 class BertRetriever(BaseRetriever):
 
@@ -164,7 +164,7 @@ class BertRetriever(BaseRetriever):
         
         # maybe its useful to update 
         self.update_cnt += 1
-        if self.update_cnt % 20 == 0: 
+        if self.update_cnt % 100 == 0: 
             self.update_doc_embedding()
 
 
