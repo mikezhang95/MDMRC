@@ -66,8 +66,8 @@ with open(os.path.join(saved_path, 'config.json'), 'w') as f:
 # load dataset 
 train_data, test_data, documents = load_data(config)
 # split dataset into train/val 4:1
-train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2)
-_, test_loader = get_data_loader(test_data, batch_size=config.batch_size, split_ratio=1.0)
+train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2, shuffle=True)
+test_loader,_ = get_data_loader(test_data, batch_size=config.batch_size, split_ratio=0.0, shuffle=False)
 config["num_samples"]= len(train_data)
 
 

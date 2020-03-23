@@ -23,7 +23,7 @@ def load_data(config):
 
 
 
-def get_data_loader(data, batch_size=8, split_ratio=0):
+def get_data_loader(data, batch_size=8, split_ratio=0, shuffle=True):
 
     # full_dataset = Dataset(data)
     full_dataset = data
@@ -35,7 +35,7 @@ def get_data_loader(data, batch_size=8, split_ratio=0):
 
 
     # create dataloader w.r.t. dataset
-    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, collate_fn=collate_fn)
+    train_loader = DataLoader(train_dataset, shuffle=shuffle, batch_size=batch_size, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, shuffle=False, batch_size=batch_size, collate_fn=collate_fn)
     return train_loader, val_loader
     
