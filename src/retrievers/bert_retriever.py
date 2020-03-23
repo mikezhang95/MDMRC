@@ -11,7 +11,7 @@ from retrievers import BaseRetriever
 from metrics import *
 from utils import *
 
-DOC_LEN = 300 # TODO: hardcode
+DOC_LEN = 200 # TODO: hardcode
 TOPK = 3
 
 class BertRetriever(BaseRetriever):
@@ -140,8 +140,13 @@ class BertRetriever(BaseRetriever):
         logits = torch.matmul(query_emb, doc_emb.transpose(0,1)) # [bs, ds]
             
         # restore gradients for topk candidates
-        for q, logit in zip(query_emb, logits):
+        for query, q, logit in zip(queries, query_emb, logits):
             value, index = logit.topk(TOPK, largest=True)
+            # To ease training
+            if "doc_id" in query and self.training:
+                doc_index = self.doc_list.index(query["doc_id"])
+                if doc_index not in index:
+                    index[-1] = to_torch(np.array(doc_index), dtype=torch.long, use_gpu=self.config.use_gpu)
             for i in index:
                 inputs,a,t,l = self.doc_inputs[int(to_numpy(i))]
                 doc_bert, doc_pooled =  self.bert(inputs,token_type_ids=t, attention_mask=a)
@@ -159,7 +164,7 @@ class BertRetriever(BaseRetriever):
         
         # maybe its useful to update 
         self.update_cnt += 1
-        if self.update_cnt %100 == 0: 
+        if self.update_cnt % 20 == 0: 
             self.update_doc_embedding()
 
 
