@@ -44,8 +44,25 @@ class BaseRetriever(torch.nn.Module):
             Returns:
                 - cross_entropy loss
         """
-        loss_fn = torch.nn.CrossEntropyLoss()
-        loss = loss_fn(logits, labels)
+        if self.config.retriever_name not in ["AlbertRetriever, BertRetriever"]:
+            loss_fn = torch.nn.CrossEntropyLoss()
+            loss = loss_fn(logits, labels)
+
+        else:
+        # select topk to do cross entropy
+            new_logits = []
+            new_labels = []
+            for logit, label in zip(logits, labels):
+                value, index = logit.topk(self.config.retriever_topk, largest=True)
+                if label not in index:
+                    index[-1] = label
+                new_logits.append(logit[index])
+                new_labels.append((index==label).nonzero())
+            new_logits = torch.stack(new_logits)
+            new_labels = torch.stack(new_labels).squeeze()
+            loss_fn = torch.nn.CrossEntropyLoss()
+            loss = loss_fn(new_logits, new_labels)
+
         return loss
 
 
