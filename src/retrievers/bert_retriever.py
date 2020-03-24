@@ -27,7 +27,8 @@ class BertRetriever(BaseRetriever):
 
         # create bert or not(if already has albert)
         if use_bert:
-            self.bert = BertModel.from_pretrained(self.bert_dir)
+            self.bert_q = BertModel.from_pretrained(self.bert_dir)
+            self.bert_d = BertModel.from_pretrained(self.bert_dir)
 
         # init other parts/ depends on self.bert
         self.init_network()
@@ -59,7 +60,7 @@ class BertRetriever(BaseRetriever):
         self.activation = RReLU(inplace=True)
 
         # bert part
-        bert_config = self.bert.config
+        bert_config = self.bert_q.config
         bert_hidden = bert_config.hidden_size # 768
 
         # head part
@@ -124,7 +125,7 @@ class BertRetriever(BaseRetriever):
         input_ids, attention_mask, token_type_ids, labels = self.create_input(queries)
 
         # batch_size = real_batch_size * candidate_num
-        seqs, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
+        seqs, pooled_output = self.bert_q(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
 
         # embedding for input x
         pooled_output = seqs = seqs[:, 0]
@@ -148,7 +149,7 @@ class BertRetriever(BaseRetriever):
                     index[-1] = to_torch(np.array(doc_index), dtype=torch.long, use_gpu=self.config.use_gpu)
             for i in index:
                 inputs,a,t,l = self.doc_inputs[int(to_numpy(i))]
-                doc_bert, doc_pooled =  self.bert(inputs,token_type_ids=t, attention_mask=a)
+                doc_bert, doc_pooled =  self.bert_d(inputs,token_type_ids=t, attention_mask=a)
                 doc_pooled = doc_bert = doc_bert[:, 0]
                 emb = self.doc_layer(self.dropout(doc_pooled))
                 logit[i] = torch.matmul(q.squeeze(), emb.squeeze())
@@ -190,7 +191,7 @@ class BertRetriever(BaseRetriever):
             attention_mask = attention_mask.squeeze(1)
             token_type_ids = token_type_ids.squeeze(1)
 
-            seqs, pooled_output = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
+            seqs, pooled_output = self.bert_d(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
             pooled_output = seqs = seqs[:, 0]
             pooled_output = self.dropout(pooled_output) # [bs,768]
             pooled_output = self.doc_layer(pooled_output).detach()  # [bs, 100]
