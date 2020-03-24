@@ -4,7 +4,8 @@
 """
 import numpy as np
 import torch
-from rank_bm25 import BM25Okapi
+from rank_bm25 import BM25Okapi, BM25L, BM25Plus
+from gensim.summarization.bm25 import BM25
 
 from utils import *
 from retrievers import BaseRetriever
@@ -21,7 +22,10 @@ class BM25Retriever(BaseRetriever):
         for key, doc in documents.items():
             self.corpus.append(doc['jieba_cut'])
 
-        self.bm25 = BM25Okapi(self.corpus)
+        # self.bm25 = BM25Okapi(self.corpus)
+        # self.bm25 = BM25L(self.corpus)
+        # self.bm25 = BM25Plus(self.corpus)
+        self.bm25 = BM25(self.corpus)
 
     # calculate (query, document) logit
     def forward(self, queries):

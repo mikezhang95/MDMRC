@@ -58,11 +58,16 @@ def topk_fn(order_list, label, topk):
     """
     """ 
 
-    position = order_list.index(label)
+    
+    if label in order_list:
+        position = order_list.index(label)
+    else:
+        position = len(order_list) + 1
+
 
     result = []
     for k in topk:
-        if position<k:
+        if position < k:
             result.append(1)
         else:
             result.append(0)

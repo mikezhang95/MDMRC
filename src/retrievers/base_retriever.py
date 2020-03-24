@@ -66,6 +66,7 @@ class BaseRetriever(torch.nn.Module):
         return loss
 
 
+    @cost
     def predict(self, queries, doc_logits, topk=-1):
         """
             Generated keys:
@@ -73,25 +74,28 @@ class BaseRetriever(torch.nn.Module):
                 - "doc_order": a list of tuple (id, score) 
         """
         if topk==-1:
-            topk = len(self.doc_list)
+            topk = 100 # TODO: hard code here
 
-        doc_logits = to_numpy(doc_logits)
+        # doc_logits = to_numpy(doc_logits)
 
         # 2. sort documents and return topk
-        for query, doc_logit in zip(queries, doc_logits):
-            doc_scores = list(zip(self.doc_list, doc_logit))
-            doc_scores.sort(key=lambda x: -x[1])
-            doc_order = [x[0] for x in doc_scores]
+        for query, logit in zip(queries, doc_logits):
 
-            # retrieve cheat (give groud truth to reader)
-            # this only influences doc_candidates passed to reader but not doc_order.
+            # only calculate topk 100
+            value, index = logit.topk(100, largest=True)
+            value = list(to_numpy(value))
+            index = list(to_numpy(index))
+            doc_order = [self.doc_list[i] for i in index]
+
+            # predict topk to reader
+            index = index[:topk]
+            # whether to cheat?
             if self.config.retriever_cheat and 'doc_id' in query:
-                p = doc_order.index(query['doc_id'])
-                if p >= topk:
-                    e = doc_scores.pop(p)
-                    doc_scores.insert(0, e)
-
-            selected_docs = doc_scores[:topk]
+                doc_id = query["doc_id"]
+                p = self.doc_list.index(doc_id)
+                if p not in index:
+                    index[-1] = p
+            selected_docs = [ (self.doc_list[i], logit[i]) for i in index]
             query["doc_candidates"] = selected_docs
             query["doc_order"] = doc_order
 
