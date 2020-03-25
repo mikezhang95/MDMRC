@@ -78,13 +78,17 @@ class BertReader(BaseReader):
         bert_hidden = bert_config.hidden_size # 768
 
         # head part
-        head_hidden = self.config.head_hidden
-        self.start_hidden = Linear(bert_hidden, head_hidden, bias=True)
-        self.start_head = Linear(head_hidden, 1, bias=True)
-        # self.start_head = Linear(head_hidden, 1, bias=False)
-        self.end_hidden = Linear(bert_hidden, head_hidden, bias=True) 
-        self.end_head = Linear(head_hidden, 1, bias=True)
-        # self.end_head = Linear(head_hidden, 1, bias=False)
+        # head_hidden = self.config.head_hidden
+        # self.start_hidden = Linear(bert_hidden, head_hidden, bias=True)
+        # self.start_head = Linear(head_hidden, 1, bias=True)
+        self.start_head = Linear(bert_hidden, 1, bias=True)
+        torch.nn.init.normal_(self.start_head.weight, mean=0.0, std=0.02)
+        torch.nn.init.zeros_(self.start_head.bias)
+        # self.end_hidden = Linear(bert_hidden, head_hidden, bias=True) 
+        # self.end_head = Linear(head_hidden, 1, bias=True)
+        self.end_head = Linear(bert_hidden, 1, bias=True)
+        torch.nn.init.zeros_(self.end_head.bias)
+        torch.nn.init.normal_(self.end_head.weight, mean=0.0, std=0.02)
 
         # activation
         self.activation = RReLU(inplace=True)
@@ -100,12 +104,14 @@ class BertReader(BaseReader):
         # batch_size = real_batch_size * candidate_num
         out_seq, _ = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
 
-        out_seq = self.dropout(out_seq) # [bs,seq_len,768]
+        # out_seq = self.dropout(out_seq) # [bs,seq_len,768]
+        # start_hidden = self.start_hidden(out_seq)
+        # start_logits = self.start_head(self.activation(start_hidden)).squeeze(-1)
+        # end_hidden = self.end_hidden(out_seq)
+        # end_logits = self.end_head(self.activation(end_hidden)).squeeze(-1)
+        start_logits = self.start_head(out_seq).squeeze(-1)
+        end_logits = self.end_head(out_seq).squeeze(-1)
 
-        start_hidden = self.start_hidden(out_seq)
-        start_logits = self.start_head(self.activation(start_hidden)).squeeze(-1)
-        end_hidden = self.end_hidden(out_seq)
-        end_logits = self.end_head(self.activation(end_hidden)).squeeze(-1)
 
         # do mask on sequencese
         seq_mask = ~attention_mask.bool()
