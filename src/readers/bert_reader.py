@@ -28,6 +28,8 @@ class BertReader(BaseReader):
         # create bert or not(already has albert)
         if use_bert:
             self.bert = BertModel.from_pretrained(self.bert_dir)
+        self.bert.pooler.dense.weight.requires_grad = False
+        self.bert.pooler.dense.bias.requires_grad = False
 
         # init other parts/ depends on self.bert
         self.init_network()
@@ -49,8 +51,15 @@ class BertReader(BaseReader):
             self.cuda()
             # multi-gpu support
             self.n_gpu = torch.cuda.device_count()
-            for p in self.all_parameters:
-                p = torch.nn.DataParallel(p)
+            if self.n_gpu > 1:
+                device_ids = list(range(self.n_gpu))
+                torch.distributed.init_process_group(backend='nccl', init_method='tcp://localhost:23456', rank=0, world_size=1)
+                self.bert = torch.nn.parallel.DistributedDataParallel(self.bert, device_ids=device_ids, output_device=device_ids[0], find_unused_parameters=True)
+                self.start_head = torch.nn.parallel.DistributedDataParallel(self.start_head, device_ids=device_ids, find_unused_parameters=True)
+                self.end_head = torch.nn.parallel.DistributedDataParallel(self.end_head, device_ids=device_ids, find_unused_parameters=True)
+                # self.bert = torch.nn.DataParallel(self.bert, device_ids=device_ids)
+                # self.start_head = torch.nn.DataParallel(self.start_head, device_ids=device_ids)
+                # self.end_head = torch.nn.DataParallel(self.end_head, device_ids=device_ids)
 
 
     @cost
@@ -58,25 +67,23 @@ class BertReader(BaseReader):
         # 1. calculate logits
         start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels = self.forward(queries)
 
-        # 2. predict
-        self.predict(queries, start_logits, end_logits, input_seqs, query_lens)
-
-        # 3. compute_loss
+        # 2. compute_loss
         if mode == "train":
             loss = self.compute_loss(start_logits, end_logits, start_labels, end_labels)
         else:
             loss = 0
+
+        # 3. predict
+        self.predict(queries, start_logits, end_logits, input_seqs, query_lens)
+
         return loss
 
 
     def update(self, loss):
-        if self.n_gpu > 1:
-            loss = loss.mean()
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
-
 
     def init_network(self):
         # dropout part
@@ -124,6 +131,7 @@ class BertReader(BaseReader):
 
         # do mask on sequencese
         seq_mask = ~attention_mask.bool()
+        # seq_mask = ~attention_mask.byte()
         start_logits = start_logits.masked_fill(seq_mask, -1e6)
         end_logits = end_logits.masked_fill(seq_mask, -1e6)
 
@@ -214,8 +222,8 @@ class BertReader(BaseReader):
         start_loss = loss_fn(start_logits, start_labels)
         end_loss = loss_fn(end_logits, end_labels)
         loss = start_loss + end_loss
-
         return loss
+
 
 
     def predict(self, queries, start_logits, end_logits, input_seqs, query_lens):

@@ -105,21 +105,22 @@ def validate(model, data_loader):
 
         # print("{}/{}".format(i, len(data_loader)))
 
-        # 1. retriever forward
-        loss1 =  retriever.retrieve(batch, mode="train")
-        loss_retriever += loss1.item()
+        with torch.no_grad():
+            # 1. retriever forward
+            loss1 =  retriever.retrieve(batch, mode="train")
+            loss_retriever += loss1.item()
 
-        ###  calculate topk for retriever
-        metric1 = retriever.collect_metric(batch)
-        merge_dict(metric_retriever, metric1)
+            ###  calculate topk for retriever
+            metric1 = retriever.collect_metric(batch)
+            merge_dict(metric_retriever, metric1)
 
-        # 2. retriever forward
-        loss2 = reader.read(batch,mode="train")
-        loss_reader += loss2.item()
+            # 2. retriever forward
+            loss2 = reader.read(batch,mode="train")
+            loss_reader += loss2.item()
 
-        ### calculate bleu/f1/rouge
-        metric2 = reader.collect_metric(batch)
-        merge_dict(metric_reader, metric2)
+            ### calculate bleu/f1/rouge
+            metric2 = reader.collect_metric(batch)
+            merge_dict(metric_reader, metric2)
 
     # TODO: save badcase
 
@@ -155,18 +156,19 @@ def generate(model, data_loader, f):
 
         logger.info("Batch {}/{}".format(i, len(data_loader)))
 
-        # 1. retriever forward
-        _ =  retriever.retrieve(batch, mode="test")
+        with torch.no_grad():
+            # 1. retriever forward
+            _ =  retriever.retrieve(batch, mode="test")
 
-        # 2. retriever forward
-        _ = reader.read(batch, mode="test")
-
-        for query in batch:
-            qid = query["question_id"]
-            docid = query["doc_id_pred"].split("-")[0]
-            answer = query["answer_pred"]
-            lines.append("%s\t%s\t%s\n"%(qid, docid, answer))
-
+            # 2. retriever forward
+            _ = reader.read(batch, mode="test")
+    
+            for query in batch:
+                qid = query["question_id"]
+                docid = query["doc_id_pred"].split("-")[0]
+                answer = query["answer_pred"]
+                lines.append("%s\t%s\t%s\n"%(qid, docid, answer))
+    
     f.write("".join(lines))
 
     logger.info('--- Generation Done ---')
@@ -184,8 +186,9 @@ def write_retriever(model, data_loader, f):
 
         logger.info("Batch {}/{}".format(i, len(data_loader)))
 
-        # 1. retriever forward
-        _ =  retriever.retrieve(batch, mode="test")
+        with torch.no_grad():
+            # 1. retriever forward
+            _ =  retriever.retrieve(batch, mode="test")
 
 
         for query in batch:
