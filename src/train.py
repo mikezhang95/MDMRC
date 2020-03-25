@@ -76,10 +76,8 @@ retriever_class = getattr(retrievers, config.retriever_name)
 retriever = retriever_class(documents, config)
 reader_class = getattr(readers, config.reader_name)
 reader = reader_class(documents, config)
-if config.use_gpu:
-    retriever = retriever.cuda()
-    reader = reader.cuda()
 model = (retriever, reader)
+
 # load pretrain model before training
 if not config.forward_only and config.pretrain_folder != "":
     pretrain_path = os.path.join(stats_path, config.pretrain_folder)

@@ -44,8 +44,14 @@ class BertReader(BaseReader):
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
         # init cuda
+        self.n_gpu = 0
         if self.config.use_gpu:
             self.cuda()
+            # multi-gpu support
+            self.n_gpu = torch.cuda.device_count()
+            for p in self.all_parameters:
+                p = torch.nn.DataParallel(p)
+
 
     @cost
     def read(self, queries, mode="test"):
@@ -64,6 +70,9 @@ class BertReader(BaseReader):
 
 
     def update(self, loss):
+        if self.n_gpu > 1:
+            loss = loss.mean()
+        self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
@@ -92,11 +101,11 @@ class BertReader(BaseReader):
 
         # activation
         self.activation = RReLU(inplace=True)
+
+        self.all_parameters = [self.dropout, self.bert, self.start_head, self.end_head, self.activation]
     
 
     def forward(self, queries):
-        # 0. clear optimizer (for training)
-        self.optimizer.zero_grad()
 
         # 1. create inputs for BERT
         input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels = self.create_input(queries)
@@ -104,7 +113,7 @@ class BertReader(BaseReader):
         # batch_size = real_batch_size * candidate_num
         out_seq, _ = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
 
-        # out_seq = self.dropout(out_seq) # [bs,seq_len,768]
+        out_seq = self.dropout(out_seq) # [bs,seq_len,768]
         # start_hidden = self.start_hidden(out_seq)
         # start_logits = self.start_head(self.activation(start_hidden)).squeeze(-1)
         # end_hidden = self.end_hidden(out_seq)
