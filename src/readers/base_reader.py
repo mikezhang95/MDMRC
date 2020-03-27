@@ -35,7 +35,7 @@ class BaseReader(torch.nn.Module):
                 - answer
                 - answer_pred
         """
-        metric_result = {"bleu":[], "f1":[], "rouge":[], "top1":[]}
+        metric_result = {"bleu":[], "f1":[], "rouge":[], "top1":[], "null":[]}
 
         # bleu/rouge/f1
         for query in queries:
@@ -56,6 +56,11 @@ class BaseReader(torch.nn.Module):
                 metric_result["top1"].append(1)
             else:
                 metric_result["top1"].append(0)
+
+            if query["answer_pred"] == "null":
+                metric_result["null"].append(1)
+            else:
+                metric_result["null"].append(0)
 
         return metric_result
  
