@@ -12,7 +12,7 @@ import json
 import logging
 import numpy as np
 
-from data_loader import get_data_loader
+from data_loader import get_data_loader, save_badcase
 from utils import merge_dict
 
 logger = logging.getLogger()
@@ -92,7 +92,7 @@ def train(model, train_loader, val_loader, config):
     return best_epoch_retriever, best_epoch_reader
 
 
-def validate(model, data_loader):
+def validate(model, data_loader, f=None):
     # models
     retriever, reader = model
     retriever.eval()
@@ -123,8 +123,9 @@ def validate(model, data_loader):
             metric2 = reader.collect_metric(batch)
             merge_dict(metric_reader, metric2)
 
-    # TODO: save badcase
-
+    # save badcase
+    if f is not None:
+        save_badcase(metric_retriever, metric_reader, data_loader, f)
 
     # calculate sample mean
     num_batch = len(data_loader)

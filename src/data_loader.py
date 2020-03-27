@@ -1,6 +1,7 @@
 
 import json
 import torch
+import csv
 from torch.utils.data import Dataset, DataLoader, random_split
 
 from utils import DATA_DIR
@@ -42,6 +43,67 @@ def get_data_loader(data, batch_size=8, split_ratio=0, shuffle=True):
 
 def collate_fn(batch):
     return batch
+
+
+
+def save_badcase(metric1, metric2, data_loader, f):
+    """
+        Args:
+            - metric1: metric for retriever
+            - metric2: metric for reader
+    """
+
+    dataset = data_loader.dataset
+    num_samples = len(dataset)
+    
+    records, topk = [], 0
+    for i in range(num_samples):
+        if metric2["top1"][i]==1 and metric2["rouge"][i] > 0.5:
+            continue
+        else: # badcase
+            query = dataset[i]
+            qid = query["question_id"]
+            q = query["context"]
+            did = query["doc_id"]
+            ans = query["answer"]
+            did_pred = query["doc_id_pred"]
+            ans_pred = query["answer_pred"]
+
+            doc_order = query["doc_order"]
+            if did in doc_order:
+                pos = str(doc_order.index(did))
+            else:
+                pos = ">100"
+            rouge = metric2["rouge"][i]
+
+            record = [qid, q, did, ans, did_pred, ans_pred, pos, rouge]
+            
+            topk = len(query["doc_candidates"])
+            for c in query["doc_candidates"]:
+                record.append(c[0])
+            records.append(record)
+
+    # write to csv
+    writer = csv.writer(f)
+    topk_head = ["top%d"%(i+1) for i in range(topk)]
+    head = ["q_id","question", "doc_id", "answer", "doc_id_pred", "answer_pred", "doc_order","rouge"] + topk_head
+
+    writer.writerow(head)
+    writer.writerows(records)
+    print("Saved {} badcases!".format(len(records)))
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
