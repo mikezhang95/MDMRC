@@ -58,9 +58,6 @@ start_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
 logger.info('[START]\n{}\n{}'.format(start_time, '=' * 30))
 
 
-# save config
-with open(os.path.join(saved_path, 'config.json'), 'w') as f:
-    json.dump(config, f, indent=4)  # sort_keys=True
 
 
 # load dataset 
@@ -88,6 +85,9 @@ if not config.forward_only and config.pretrain_folder != "":
 ##################### Training #####################
 best_epoch = None
 if not config.forward_only:
+    # save config
+    with open(os.path.join(saved_path, 'config.json'), 'w') as f:
+        json.dump(config, f, indent=4)  # sort_keys=True
     try:
         best_epoch = train(model, train_loader, val_loader, config)
     except KeyboardInterrupt:

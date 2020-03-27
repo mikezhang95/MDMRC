@@ -72,8 +72,9 @@ def train(model, train_loader, val_loader, config):
                 os.remove(os.path.join(config.saved_path, "{}-retriever".format(remove_model)))
 
         # Save Reader
-        if loss_reader < best_loss_reader:
-            best_loss_reader = loss_reader 
+        # if loss_reader < best_loss_reader :
+        if loss_reader < best_loss_reader + 0.5: # give 0.5 load 
+            best_loss_reader = min(best_loss_reader, loss_reader)
 
             cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
             logger.info('*** reader Saved with valid_loss = {}, at {}. ***'.format(loss_reader, cur_time))

@@ -36,7 +36,7 @@ def get_data_loader(data, batch_size=8, split_ratio=0, shuffle=True):
 
     # create dataloader w.r.t. dataset
     train_loader = DataLoader(train_dataset, shuffle=shuffle, batch_size=batch_size, collate_fn=collate_fn)
-    val_loader = DataLoader(val_dataset, shuffle=False, batch_size=1, collate_fn=collate_fn)
+    val_loader = DataLoader(val_dataset, shuffle=False, batch_size=batch_size, collate_fn=collate_fn)
     return train_loader, val_loader
     
 
