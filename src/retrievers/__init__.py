@@ -5,5 +5,6 @@ from retrievers.gold_retriever import *
 from retrievers.bert_retriever import *
 from retrievers.albert_retriever import *
 from retrievers.tfidf_retriever import *
+from retrievers.neg_retriever import *
 
 
