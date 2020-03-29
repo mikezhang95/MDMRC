@@ -19,7 +19,7 @@ def create_neg(train_data):
                 data["neg_weight"].append(doc[1])  # TODO: you can use bert result here!
 
 
-def create_pos(train_data, paragraphs, A_LEN=200):
+def create_pos(train_data, paragraphs, A_LEN=200, STIDE=250):
 
     print("="*6, " Creating Positive Candidates ", "="*6)
     pos_count = {}
@@ -40,16 +40,27 @@ def create_pos(train_data, paragraphs, A_LEN=200):
             if paragraph_id not in paragraphs:
                 break
 
+            # use previous finding
             context = paragraphs[paragraph_id]["context"]
-            start_ids = find_all_indexes(context, answer)
+            end_index = i * STRIDE+ len(context)
+            for pos in data["possible_pos"]:
+                if pos + len(answer) < end_index:
+                    start = pos
+                    end = start + len(answer)
+                    data["pos_cand"].append(paragraph_id)
+                    data['start'].append(start)
+                    data['end'].append(end)
+                    pos += 1
 
-            if len(start_ids) > 0:
-                start = start_ids[0]
-                end = start + len(answer) # query[start:end] 
-                data["pos_cand"].append(paragraph_id)
-                data['start'].append(start)
-                data['end'].append(end)
-                pos += 1
+
+            # start_ids = find_all_indexes(context, answer)
+            # if len(start_ids) > 0:
+                # start = start_ids[0]
+                # end = start + len(answer) # query[start:end] 
+                # data["pos_cand"].append(paragraph_id)
+                # data['start'].append(start)
+                # data['end'].append(end)
+                # pos += 1
 
        #  if len(data["start"]) > 10:
             # print(data["answer"])
@@ -83,7 +94,7 @@ def find_all_indexes(input_str, search_str):
     return l1
 
 
-def check_data(train_data, documents):
+def check_data(train_data, documents, aug_labels):
     """
         To check whether answer in documents
     """
@@ -102,6 +113,18 @@ def check_data(train_data, documents):
         elif len(start_ids) >=2 :
             # print(2, i, data['context'], answer, data['doc_id'])
             cnt_2 += 1
+            # provide augmented labels
+            assert data["doc_id"] == aug_labels[data["question_id"]]["doc_id"]
+            data["start"] = aug_labels[data["question_id"]]["start"]
+            data["end"] = aug_labels[data["question_id"]]["end"]
+
+
+        elif len(start_ids) == 1:
+            start = start_ids[0]
+            end = start + len(answer)
+            data["start"] = [start]
+            data["end"] = [end]
+            
         lens.append(len(answer))
 
     print("{} docs have no ansers.\n{} docs have more than one answers.".format(cnt_0, cnt_2))

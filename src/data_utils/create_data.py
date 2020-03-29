@@ -17,7 +17,6 @@ NEW_DATA_DIR = CUR_DIR + "../../data/processed/"
 if not os.path.exists(NEW_DATA_DIR):
     os.makedirs(NEW_DATA_DIR)
 
-
 # 1. load documents
 document = {}
 with open(RAW_DATA_DIR + "context.csv", "r") as f:
@@ -25,6 +24,10 @@ with open(RAW_DATA_DIR + "context.csv", "r") as f:
     for line in lines:
         e = line.strip().split('\t')
         document[e[0]] = {"context": " ".join(e[1:])} 
+
+
+with open(RAW_DATA_DIR + "aug_labels.json", "r") as f:
+    aug_labels = json.load(f)
 
 # 2. load train data 
 train_data = []
@@ -49,37 +52,42 @@ with open(RAW_DATA_DIR + "test.csv", "r") as f:
 
 # 4. check data and split doc
 # check whether all answers in documents
-check_data(train_data, document)
-paragraph = split_doc(document)
-document = paragraph # document becomes the new paragraph
+check_data(train_data, document, aug_labels)
 
-# 5. clean data
-# include tokenize/normalize...
-# clean_text(document)
-# clean_text(train_data)
-# clean_text(test_data)
+# paragraph = split_doc(document)
+# document = paragraph # document becomes the new paragraph
 
-
-# 5. create training labels
-bm25_retrieve(train_data, test_data, document)
-create_pos(train_data, document)
-create_neg(train_data)
+# # 5. clean data
+# # include tokenize/normalize...
+# # clean_text(document)
+# # clean_text(train_data)
+# # clean_text(test_data)
 
 
-# 7. collect statistic again 
-collect_statistic(train_data, "Train")
-collect_statistic(test_data, "Test")
-collect_statistic(document, "Document")
+# # 5. create training labels
+# bm25_retrieve(train_data, test_data, document)
+# create_pos(train_data, document)
+# create_neg(train_data)
 
-# 8. export data
+
+# # 7. collect statistic again 
+# collect_statistic(train_data, "Train")
+# collect_statistic(test_data, "Test")
+# collect_statistic(document, "Document")
+
+# # 8. export data
+# with open(NEW_DATA_DIR + "train.json", "w") as f:
+    # for data in train_data:
+        # f.write(json.dumps(data, ensure_ascii=False)+'\n')
+# with open(NEW_DATA_DIR + "test.json", "w") as f:
+    # for data in test_data:
+        # f.write(json.dumps(data, ensure_ascii=False)+'\n')
+# with open(NEW_DATA_DIR + "document.json", "w") as f:
+    # json.dump(document, f, indent=4, ensure_ascii=False)  # sort_keys=True
+
 with open(NEW_DATA_DIR + "train.json", "w") as f:
     for data in train_data:
         f.write(json.dumps(data, ensure_ascii=False)+'\n')
-with open(NEW_DATA_DIR + "test.json", "w") as f:
-    for data in test_data:
-        f.write(json.dumps(data, ensure_ascii=False)+'\n')
-with open(NEW_DATA_DIR + "document.json", "w") as f:
-    json.dump(document, f, indent=4, ensure_ascii=False)  # sort_keys=True
 
 
 
