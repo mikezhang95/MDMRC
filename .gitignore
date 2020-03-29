@@ -3,6 +3,7 @@ data/raw_data/
 data/processed_data/
 data/clean_data/
 data/processed/
+data/processed_neg/
 outputs/
 models/
 models

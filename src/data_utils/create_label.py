@@ -8,7 +8,6 @@ from tqdm import tqdm
 import heapq
 
 def create_neg(train_data):
-    
     print("="*6, " Creating Negative Candidates ", "="*6)
     for data in train_data:
         data["neg_cand"] = []
@@ -17,13 +16,13 @@ def create_neg(train_data):
             if doc[0] not in data["pos_cand"]:
                 data["neg_cand"].append(doc[0])
                 data["neg_weight"].append(doc[1])  # TODO: you can use bert result here!
+        # del data["bm25_result"]
 
 
-def create_pos(train_data, paragraphs, A_LEN=200, STIDE=250):
-
+def create_pos(train_data, paragraphs, A_LEN=200, DRIFT=150):
     print("="*6, " Creating Positive Candidates ", "="*6)
     pos_count = {}
-    for i in range(20):
+    for i in range(6):
         pos_count[i] = 0
     pos = 0
     for i, data in enumerate(train_data):
@@ -42,10 +41,11 @@ def create_pos(train_data, paragraphs, A_LEN=200, STIDE=250):
 
             # use previous finding
             context = paragraphs[paragraph_id]["context"]
-            end_index = i * STRIDE+ len(context)
-            for pos in data["possible_pos"]:
-                if pos + len(answer) < end_index:
-                    start = pos
+            start_index = i * DRIFT 
+            end_index = i * DRIFT + len(context)
+            for pos in data["orig_start"]:
+                if pos >= start_index  and pos + len(answer) <= end_index:
+                    start = pos - start_index 
                     end = start + len(answer)
                     data["pos_cand"].append(paragraph_id)
                     data['start'].append(start)
@@ -67,9 +67,10 @@ def create_pos(train_data, paragraphs, A_LEN=200, STIDE=250):
             # print(data["pos_cand"])
             # print("\n")
 
+        del data["orig_start"], data["orig_end"]
         if len(data["start"]) == 0:
             print("Cannot Create Find Answer in Document")
-            print(data, document)
+            print(data)
             raise NotImplementedError
 
         pos_count[int(len(data["start"]))] += 1
@@ -94,7 +95,7 @@ def find_all_indexes(input_str, search_str):
     return l1
 
 
-def check_data(train_data, documents, aug_labels):
+def correct_label(train_data, documents, aug_labels):
     """
         To check whether answer in documents
     """
@@ -115,15 +116,15 @@ def check_data(train_data, documents, aug_labels):
             cnt_2 += 1
             # provide augmented labels
             assert data["doc_id"] == aug_labels[data["question_id"]]["doc_id"]
-            data["start"] = aug_labels[data["question_id"]]["start"]
-            data["end"] = aug_labels[data["question_id"]]["end"]
+            data["orig_start"] = aug_labels[data["question_id"]]["start"]
+            data["orig_end"] = aug_labels[data["question_id"]]["end"]
 
 
         elif len(start_ids) == 1:
             start = start_ids[0]
             end = start + len(answer)
-            data["start"] = [start]
-            data["end"] = [end]
+            data["orig_start"] = [start]
+            data["orig_end"] = [end]
             
         lens.append(len(answer))
 
