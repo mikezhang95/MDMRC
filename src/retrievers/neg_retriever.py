@@ -45,24 +45,23 @@ class NegRetriever(BaseRetriever):
         # 2. sort documents and return topk
         for query in queries:
 
-            index = list(to_numpy(index))
             bm25_result = query["bm25_result"]
             query["doc_order"] = [b[0] for b in bm25_result]
 
             # do this only in train/val
-            if 'doc_id' in query:
+            if not self.config.forward_only and 'doc_id' in query:
                 pos_cands = query["pos_cand"]
-                neg_cands = query["neg_cand"][:10] # hardcode
-                neg_weights = query["neg_weight"][:10] # hardcode
+                neg_cands = query["neg_cand"][:topk] 
+                neg_weights = query["neg_weight"][:topk] 
 
                 # sample positive
                 num_pos = min(NUM_POS, len(pos_cands))
-                selected_pos = np.random.choice(pos_cands, size=num_pos, replace=False)
+                selected_pos = list(np.random.choice(pos_cands, size=num_pos, replace=False))
 
                 # sample negative
                 num_neg = num_pos
                 # weights: uniform or importance sampling !
-                selected_neg = np.random.choice(neg_cands, size=num_neg, replace=False)
+                selected_neg = list(np.random.choice(neg_cands, size=num_neg, replace=False))
 
                 selected_all = selected_pos + selected_neg 
                 doc_candidates = [(s,1) for s in selected_all] # ignore the probability

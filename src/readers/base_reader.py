@@ -52,7 +52,7 @@ class BaseReader(torch.nn.Module):
                 metric_result["rouge"].append(0.0)
                 print("[Warning]Rouge Wrong: {}/{}".format(answer_pred,answer_gt))
 
-            if query["doc_id_pred"] == query["doc_id"]:
+            if query["doc_id_pred"] in query["pos_cand"]:
                 metric_result["top1"].append(1)
             else:
                 metric_result["top1"].append(0)

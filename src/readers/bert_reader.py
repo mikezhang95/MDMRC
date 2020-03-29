@@ -180,12 +180,13 @@ class BertReader(BaseReader):
                 query_lens.append(2 + len(text_a))
 
                 # create label for training
-                if "doc_id" in query and doc_id == query["doc_id"]:
+                if "pos_cand" in query and doc_id in query["pos_cand"]:
+                    i = query["pos_cand"].index(doc_id)
                     # start_labels.append(query_lens[-1] + query["start_bert"])
                     # end_labels.append(query_lens[-1] + query["end_bert"])
                     try:
-                        start_labels.append(query_lens[-1] + orig_to_tok_index[query["start"]])
-                        end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"]])
+                        start_labels.append(query_lens[-1] + orig_to_tok_index[query["start"][i]])
+                        end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"][i]])
                     except:
                         print(len(doc["context"]),len(doc["bert_cut"]))
                         print(query["start"], query["end"], doc)
