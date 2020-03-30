@@ -13,7 +13,7 @@ STRIDE = 250 # override length
 A_LEN = 200 #  assert A_LEN + Q_LEN < STRIDE
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))  + '/'
 RAW_DATA_DIR = CUR_DIR + "../../data/clean_data/"
-NEW_DATA_DIR = CUR_DIR + "../../data/processed_neg/"
+NEW_DATA_DIR = CUR_DIR + "../../data/processed_neg_new/"
 if not os.path.exists(NEW_DATA_DIR):
     os.makedirs(NEW_DATA_DIR)
 
@@ -53,7 +53,6 @@ with open(RAW_DATA_DIR + "test.csv", "r") as f:
 # 4. check data and split doc
 # check whether all answers in documents
 correct_label(train_data, document, aug_labels)
-
 paragraph = split_doc(document)
 document = paragraph # document becomes the new paragraph
 

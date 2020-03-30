@@ -28,4 +28,3 @@ def split_doc(documents, D_LEN=400, STRIDE=250):
     print("-"*24)
     return paragraphs
 
-
