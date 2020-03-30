@@ -31,7 +31,7 @@ for w in syn_words:
     
     
 def my_tokenize(text, filter_stop_word = True, norm_flag = True):
-    tokens = jieba.lcut(text.lower())
+    tokens= jieba.lcut(text)
     if filter_stop_word:  
         tokens = list(filter(lambda x: x not in stop_words, tokens))
 #         if norm_flag:
