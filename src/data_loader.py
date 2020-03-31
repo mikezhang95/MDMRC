@@ -60,23 +60,35 @@ def save_badcase(metric1, metric2, data_loader, f):
     for i in range(num_samples):
         if metric2["top1"][i]==1 and metric2["rouge"][i] > 0.5:
             continue
+
         else: # badcase
             query = dataset[i]
             qid = query["question_id"]
             q = query["context"]
-            did = query["doc_id"]
             ans = query["answer"]
-            did_pred = query["doc_id_pred"]
+            did_pred = query["doc_id_pred"] 
             ans_pred = query["answer_pred"]
-
             doc_order = query["doc_order"]
-            if did in doc_order:
-                pos = str(doc_order.index(did))
-            else:
+            pos_doc_list = query["pos_cand"] # positive label list 
+            did = "||".join(pos_doc_list)
+
+            pos  = np.inf
+            for l in pos_doc_list:
+                if l in doc_order:
+                    p = doc_order.index(l)
+                else:
+                    p = 101
+                if p < pos:
+                    pos = p
+            if pos > 100:
                 pos = ">100"
+            else:
+                pos = str(pos)
+            pos_pred = str(doc_order.index(did_pred))
+
             rouge = metric2["rouge"][i]
 
-            record = [qid, q, did, ans, did_pred, ans_pred, pos, rouge]
+            record = [qid, q, did, ans, pos, did_pred, ans_pred, pos_pred, rouge]
             
             topk = len(query["doc_candidates"])
             for c in query["doc_candidates"]:
@@ -86,7 +98,7 @@ def save_badcase(metric1, metric2, data_loader, f):
     # write to csv
     writer = csv.writer(f)
     topk_head = ["top%d"%(i+1) for i in range(topk)]
-    head = ["q_id","question", "doc_id", "answer", "doc_id_pred", "answer_pred", "doc_order","rouge"] + topk_head
+    head = ["q_id","question", "doc_id", "answer", "doc_pos", "doc_id_pred", "answer_pred", "doc_pos_pred","rouge"] + topk_head
 
     writer.writerow(head)
     writer.writerows(records)
