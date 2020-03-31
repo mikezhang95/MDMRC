@@ -2,6 +2,7 @@
 import json
 import torch
 import csv
+import numpy as np
 from torch.utils.data import Dataset, DataLoader, random_split
 
 from utils import DATA_DIR
