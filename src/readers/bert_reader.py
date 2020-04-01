@@ -245,7 +245,7 @@ class BertReader(BaseReader):
             i += num
 
             # find best span according to the logit 
-            span, doc_cnt = find_best_answer(query_len, start_logit, end_logit)
+            span, doc_cnt, records = find_best_answer(query_len, start_logit, end_logit)
 
             doc_id = query["doc_candidates"][doc_cnt][0]
             doc = self.documents[doc_id]
@@ -269,7 +269,13 @@ class BertReader(BaseReader):
                 # print(tok_to_orig_index[-1])
                 # raise NotImplementedError
 
+            qid = query["question_id"]
+            for ii, record in enumerate(records):
+                did = query["doc_candidates"][ii][0]
+                logit = "\t".join(record)
+                wf.write("{}\t{}\t{}\n".format(qid, did, logit))
             
+wf = open("bert_logits.txt", "w")
 
 
 # Method 1: y = max_z argmax_y[ p(y|z,x) ]
@@ -278,7 +284,8 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
     best_span = (0, 0)
     best_score = -np.inf
     best_doc = 0
-
+    records = []
+    
     # for some documents
     doc_cnt = -1
     for length, start_logit, end_logit in zip(query_lens, start_logits, end_logits):
@@ -297,7 +304,9 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
             best_span = span 
             best_doc = doc_cnt
 
-    return best_span, best_doc
+        records.append(to_numpy(start_logit[i]), to_numpy(end_logit[j]), to_numpy(start_logit[0]), to_numpy(end_logit[0]))
+
+    return best_span, best_doc, records
 
 
 
