@@ -6,8 +6,9 @@ import jieba
 from gensim.summarization.bm25 import BM25
 from tqdm import tqdm
 import heapq
-from word_util import my_tokenize, syn_words
+from word_util import syn_words, MyTokenizer
 
+t = MyTokenizer(syn_words)
 
 def create_neg(train_data):
     print("="*6, " Creating Negative Candidates ", "="*6)
@@ -129,7 +130,7 @@ def correct_label(train_data, documents, aug_labels):
             data["orig_end"] = [end]
             
         lens.append(len(answer))
-
+        
     print("{} docs have no ansers.\n{} docs have more than one answers.".format(cnt_0, cnt_2))
 
 
@@ -143,43 +144,41 @@ def bm25_retrieve(train_data, test_data, documents):
     print("Document Data") 
     for key, doc in tqdm(documents.items()):
         # jieba_cut = jieba.lcut(doc['context'])
-        jieba_cut = my_tokenize(doc['context'], filter_stop_word=True, norm_flag=False)
+        jieba_cut = t.tokenize(doc['context'], filter_stop_word=True, norm_flag=True)
         doc['jieba_cut'] = jieba_cut
         
     ### add tags (cities, organizations) ###
     add_tags(documents)
 
+    # create bm25 model
     for key, doc in documents.items():
         jieba_cut = doc['jieba_cut']
-        if "tag" in doc:
-            jieba_cut = list(doc["tag"]["city"]) + list(doc["tag"]["org"])  + jieba_cut
-            # del doc["tag"]
         corpus.append(jieba_cut)
         doc_list.append(key)
         del doc["jieba_cut"]
     bm25 = BM25(corpus)
     
+    
     print("Train Data") 
     for i, doc in tqdm(enumerate(train_data)):
         # jieba_cut = jieba.lcut(doc["context"])
-        jieba_cut = my_tokenize(doc["context"], filter_stop_word=True, norm_flag=False)
+        jieba_cut = t.tokenize(doc["context"], filter_stop_word=True, norm_flag=True)
         match_scores = list(bm25.get_scores(jieba_cut))
         indexes = heapq.nlargest(100, range(len(match_scores)), match_scores.__getitem__)
         doc["bm25_result"] = [(doc_list[i], match_scores[i])  for i in indexes]
 
 
-#     print("Test Data") 
-#     for i, doc in tqdm(enumerate(test_data)):
-# #         jieba_cut = jieba.lcut(doc["context"])
-#         jieba_cut = my_tokenize(doc["context"], norm_flag=False)
-#         match_scores = list(bm25.get_scores(jieba_cut))
-#         indexes = heapq.nlargest(100, range(len(match_scores)), match_scores.__getitem__)
-#         doc["bm25_result"] = [(doc_list[i], match_scores[i])  for i in indexes]
+    print("Test Data") 
+    for i, doc in tqdm(enumerate(test_data)):
+        # jieba_cut = jieba.lcut(doc["context"])
+        jieba_cut = t.tokenize(doc["context"], filter_stop_word=True, norm_flag=True)
+        match_scores = list(bm25.get_scores(jieba_cut))
+        indexes = heapq.nlargest(100, range(len(match_scores)), match_scores.__getitem__)
+        doc["bm25_result"] = [(doc_list[i], match_scores[i])  for i in indexes]
 
     calculate_topk(train_data)
         
 def calculate_topk(train_data):
-
     topk = [1,5,10,20,30,40,50,60,70,80,90,100]
     result = {}
     for k in topk:
@@ -198,47 +197,44 @@ def calculate_topk(train_data):
                 result[k].append(1)
             else:
                 result[k].append(0)
-    
     for k in topk:
         result[k] = np.mean(result[k])
     print(result)       
-       
-def add_tags(documents):
-    
+ 
+
+"""
+Only Consider City Tags currently...
+"""
+def add_tags(documents): 
     tags = {}
+    p_count = {}
     for key, doc in documents.items():
         real_doc_id = key[:len("230b6fc2a40937f9adf45ea97abad846")]
         jieba_cut = doc['jieba_cut']
         if real_doc_id not in tags:
             tags[real_doc_id] = {"city":set(), "org": set()}
+            p_count[real_doc_id] = 0
+        p_count[real_doc_id] += 1
         for w in jieba_cut:
             if w in syn_words:
-                tags[real_doc_id][syn_words[w][1]].add(syn_words[w][0])
+                # normalize
+                tags[real_doc_id][syn_words[w][1]].add(syn_words[w][0]) 
+#                 # not normalize
+#                 tags[real_doc_id][syn_words[w][1]].add(w)
 
     for key, doc in documents.items():
+        jieba_cut = doc['jieba_cut']
         real_doc_id = key[:len("230b6fc2a40937f9adf45ea97abad846")]
-        doc['tag'] = tags[real_doc_id]                          
-                                                            
+        tag = tags[real_doc_id]   
+        # add city tags into jieba_cut
+        if len(tag["city"]) <= 3 :
+            jieba_cut += list(tag["city"])
+        doc["jieba_cut"] = jieba_cut
+        
+
 # Calculate Top
 if __name__ == '__main__':
     
-    # import os
-    # import json
-    # CUR_DIR = os.path.dirname(os.path.abspath(__file__))  + '/'
-    # RAW_DATA_DIR = CUR_DIR + "../../data/processed_neg/"
-
-    # train = []
-    # with open(RAW_DATA_DIR + "train.json", "r") as f:
-        # lines = f.readlines()
-        # for line in lines:
-            # train.append(json.loads(line.strip("\n")))
-            # print(train[0])
-            # break
-    # calculate_topk(train)
-
-
-
-
     import os
     from split_doc import split_doc
     CUR_DIR = os.path.dirname(os.path.abspath(__file__))  + '/'
@@ -271,7 +267,9 @@ if __name__ == '__main__':
             e = line.strip().split('\t')
             if not e: break
             test_data.append({"question_id":e[0], "context":e[1]})
-                          
+                           
     paragraph = split_doc(document)
     document = paragraph # document becomes the new paragraph
+    
+    train_data = train_data
     bm25_retrieve(train_data, test_data, document)
