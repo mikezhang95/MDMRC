@@ -269,13 +269,14 @@ class BertReader(BaseReader):
                 # print(tok_to_orig_index[-1])
                 # raise NotImplementedError
 
-            qid = query["question_id"]
-            for ii, record in enumerate(records):
-                did = query["doc_candidates"][ii][0]
-                logit = "\t".join(record)
-                wf.write("{}\t{}\t{}\n".format(qid, did, logit))
+
+#             qid = query["question_id"]
+            # for ii, record in enumerate(records):
+                # did = query["doc_candidates"][ii][0]
+                # logit = "\t".join(record)
+                # wf.write("{}\t{}\t{}\n".format(qid, did, logit))
             
-wf = open("bert_logits.txt", "w")
+# wf = open("bert_logits.txt", "a")
 
 
 # Method 1: y = max_z argmax_y[ p(y|z,x) ]
