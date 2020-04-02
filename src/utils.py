@@ -142,5 +142,5 @@ def find_best_model(saved_path):
 def softmax(x):
     """Compute softmax values for each sets of scores in x."""
     e_x = np.exp(x - np.max(x))
-    return e_x / np.sum(x)
+    return e_x / np.sum(e_x)
 
