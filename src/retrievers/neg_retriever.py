@@ -61,7 +61,8 @@ class NegRetriever(BaseRetriever):
                 # sample negative
                 num_neg = num_pos
                 # weights: uniform or importance sampling !
-                selected_neg = list(np.random.choice(neg_cands, size=num_neg, replace=False))
+                weights = softmax(np.array(neg_weights))
+                selected_neg = list(np.random.choice(neg_cands, size=num_neg, replace=False, p=weights))
 
                 selected_all = selected_pos + selected_neg 
                 doc_candidates = [(s,1) for s in selected_all] # ignore the probability
