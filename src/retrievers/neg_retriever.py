@@ -51,6 +51,7 @@ class NegRetriever(BaseRetriever):
             # do this only in train/val
             if not self.config.forward_only and 'doc_id' in query:
                 pos_cands = query["pos_cand"]
+                topk = min(topk, len(query["neg_cand"]))
                 neg_cands = query["neg_cand"][:topk] 
                 neg_weights = query["neg_weight"][:topk] 
 
@@ -68,7 +69,7 @@ class NegRetriever(BaseRetriever):
                 doc_candidates = [(s,1) for s in selected_all] # ignore the probability
                 query["doc_candidates"] = doc_candidates # 2*NUM_POS
             else:
-                query["doc_candidates"] = bm25_result[:topk]
+                query["doc_candidates"] = bm25_result[:min(topk,len(bm25_result))]
 
 
 

@@ -85,7 +85,10 @@ def save_badcase(metric1, metric2, data_loader, f):
                 pos = ">100"
             else:
                 pos = str(pos)
-            pos_pred = str(doc_order.index(did_pred))
+            if did_pred in doc_order:
+                pos_pred = str(doc_order.index(did_pred))
+            else:
+                pos_pred = ">100"
 
             rouge = metric2["rouge"][i]
 
