@@ -12,6 +12,8 @@ from callback.progressbar import ProgressBar
 
 MaskedLmInstance = collections.namedtuple("MaskedLmInstance", ["index", "label"])
 
+ner_checkpoint = "../../../BERT-NER-Pytorch/outputs/cluener_output/bert/checkpoint-896/"
+
 def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens):
     """Truncates a pair of sequences to a maximum sequence length."""
     while True:
@@ -32,6 +34,8 @@ def create_instances_from_document(all_documents, document_index, max_seq_length
     """Creates `TrainingInstance`s for a single document.
      This method is changed to create sentence-order prediction (SOP) followed by idea from paper of ALBERT, 2019-08-28, brightmart
     """
+    ner_model = load_ner_model(ner_checkpoint) # load NER model
+
     document = all_documents[document_index]  # 得到一个文档
 
     # Account for [CLS], [SEP], [SEP]
@@ -316,10 +320,8 @@ def main():
 def load_ner_model(checkpoint):
 
     from model.bert_for_ner import BertSpanForNer
-    
-    # checkpoint = 
-    # model = BertSpanForNer.from_pretrained(checkpoint)
-    model = Bert
+
+    model = BertSpanForNer.from_pretrained(checkpoint)
 
     return model
 
@@ -327,8 +329,8 @@ def load_ner_model(checkpoint):
 if __name__ == "__main__":
 
     # main()
-    checkpoint = 
-    model = load_ner_model()
+    checkpoint = "../../../BERT-NER-Pytorch/outputs/cluener_output/bert/checkpoint-896/"
+    ner_model = load_ner_model(checkpoint)
 
 
 '''
