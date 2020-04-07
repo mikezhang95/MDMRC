@@ -317,20 +317,10 @@ def main():
                 }
                 metrics_file.write(json.dumps(metrics))
 
-def load_ner_model(checkpoint):
-
-    from model.bert_for_ner import BertSpanForNer
-
-    model = BertSpanForNer.from_pretrained(checkpoint)
-
-    return model
 
 
 if __name__ == "__main__":
-
-    # main()
-    checkpoint = "../../../BERT-NER-Pytorch/outputs/cluener_output/bert/checkpoint-896/"
-    ner_model = load_ner_model(checkpoint)
+    main()
 
 
 '''

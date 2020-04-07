@@ -278,7 +278,8 @@ def main():
 
                 masked_lm_loss = loss_fct(prediction_scores.view(-1, bert_config.vocab_size), lm_label_ids.view(-1))
                 next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), is_next.view(-1))
-                loss = masked_lm_loss + next_sentence_loss
+                # loss = masked_lm_loss + next_sentence_loss
+                loss = masked_lm_loss # YZ: only focus on masked_lm_loss
 
                 mask_metric(logits=prediction_scores.view(-1, bert_config.vocab_size), target=lm_label_ids.view(-1))
                 sop_metric(logits=seq_relationship_score.view(-1, 2), target=is_next.view(-1))

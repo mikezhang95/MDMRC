@@ -2,6 +2,7 @@ import os
 import json
 import random
 import numpy as np
+import math
 import collections
 from pathlib import Path
 from tools.common import logger, init_logger
@@ -11,6 +12,7 @@ from model.tokenization_bert import BertTokenizer
 from callback.progressbar import ProgressBar
 
 MaskedLmInstance = collections.namedtuple("MaskedLmInstance", ["index", "label"])
+SENTENCE_LEN = 25 # this is the mean length of questions
 
 def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens):
     """Truncates a pair of sequences to a maximum sequence length."""
@@ -182,26 +184,28 @@ def create_masked_lm_predictions(tokens, ners, max_ngram, masked_lm_prob, max_pr
 def create_training_instances(input_file, tokenizer, max_seq_len, short_seq_prob,
                               max_ngram, masked_lm_prob, max_predictions_per_seq):
     """Create `TrainingInstance`s from raw text."""
-    all_documents = [[]]
+    all_documents = []
     # Input file format:
     # (1) One sentence per line. These should ideally be actual sentences, not
     # entire paragraphs or arbitrary spans of text. (Because we use the
     # sentence boundaries for the "next sentence prediction" task).
     # (2) Blank lines between documents. Document boundaries are needed so
     # that the "next sentence prediction" task doesn't span between documents.
-    f = open(input_file, 'r')
-    lines = f.readlines()
-    pbar = ProgressBar(n_total=len(lines), desc='read data')
-    for line_cnt, line in enumerate(lines):
-        line = line.strip()
-        # Empty lines are used as document delimiters
-        if not line:
-            all_documents.append([])
-        tokens = tokenizer.tokenize(line)
-        if tokens:
-            all_documents[-1].append(tokens)
-        pbar(step=line_cnt)
-    print(' ')
+    with open(input_file, 'r') as f:
+        documents = json.load(f)
+
+    for key, doc in documents.items():
+        context = doc["context"]
+        tokens = tokenizer.tokenize(context)
+        # split according to the 
+        num_lines = math.floor(len(tokens) / SENTENCE_LEN)
+        all_documents.append([])
+        for i in num_lines:
+            s = i*SENTENCE_LEN
+            e = min(len(tokens), (i+1)*SENTENCE_LEN)
+            all_documents[-1].append(tokens[s:e])
+
+
     # Remove empty documents
     all_documents = [x for x in all_documents if x]
     random.shuffle(all_documents)
@@ -216,6 +220,7 @@ def create_training_instances(input_file, tokenizer, max_seq_len, short_seq_prob
                 max_ngram, masked_lm_prob, max_predictions_per_seq, vocab_words))
         pbar(step=document_index)
     print(' ')
+
     ex_idx = 0
     while ex_idx < 5:
         instance = instances[ex_idx]
@@ -263,38 +268,22 @@ def main():
     logger.info("pregenerate training data parameters:\n %s", args)
     tokenizer = BertTokenizer(vocab_file=args.vocab_path, do_lower_case=args.do_lower_case)
 
-    # split big file
-    if args.do_split:
-        corpus_path =args.data_dir / "corpus/corpus.txt"
-        split_save_path = args.data_dir / "/corpus/train"
-        if not split_save_path.exists():
-            split_save_path.mkdir(exist_ok=True)
-        line_per_file = args.line_per_file
-        command = f'split -a 4 -l {line_per_file} -d {corpus_path} {split_save_path}/shard_'
-        os.system(f"{command}")
 
-    # generator train data
-    if args.do_data:
-        data_path = args.data_dir / "corpus/train"
-        files = sorted([f for f in data_path.parent.iterdir() if f.exists() and '.txt' in str(f)])
-        for idx in range(args.file_num):
-            logger.info(f"pregenetate {args.data_name}_file_{idx}.json")
-            save_filename = data_path / f"{args.data_name}_file_{idx}.json"
-            num_instances = 0
-            with save_filename.open('w') as fw:
-                for file_idx in range(len(files)):
-                    file_path = files[file_idx]
-                    file_examples = create_training_instances(input_file=file_path,
-                                                              tokenizer=tokenizer,
-                                                              max_seq_len=args.max_seq_len,
-                                                              max_ngram=args.max_ngram,
-                                                              short_seq_prob=args.short_seq_prob,
-                                                              masked_lm_prob=args.masked_lm_prob,
-                                                              max_predictions_per_seq=args.max_predictions_per_seq)
-                    file_examples = [json.dumps(instance) for instance in file_examples]
-                    for instance in file_examples:
-                        fw.write(instance + '\n')
-                        num_instances += 1
+    file_path = args.data_dir+"context.json"
+    file_examples = create_training_instances(input_file=file_path,
+                                              tokenizer=tokenizer,
+                                              max_seq_len=args.max_seq_len,
+                                              max_ngram=args.max_ngram,
+                                              short_seq_prob=args.short_seq_prob,
+                                              masked_lm_prob=args.masked_lm_prob,
+                                              max_predictions_per_seq=args.max_predictions_per_seq)
+
+    file_examples = [json.dumps(instance) for instance in file_examples]
+
+    wf = open(args.data_dir+"train_lm.json", "w")
+    for instance in file_examples:
+        fw.write(instance + '\n')
+        num_instances += 1
             metrics_file = data_path / f"{args.data_name}_file_{idx}_metrics.json"
             print(f"num_instances: {num_instances}")
             with metrics_file.open('w') as metrics_file:
@@ -304,8 +293,59 @@ def main():
                 }
                 metrics_file.write(json.dumps(metrics))
 
+    
+#     # split big file
+    # if args.do_split:
+        # corpus_path =args.data_dir / "corpus/corpus.txt"
+        # split_save_path = args.data_dir / "/corpus/train"
+        # if not split_save_path.exists():
+            # split_save_path.mkdir(exist_ok=True)
+        # line_per_file = args.line_per_file
+        # command = f'split -a 4 -l {line_per_file} -d {corpus_path} {split_save_path}/shard_'
+        # os.system(f"{command}")
+
+#     # generator train data
+    # if args.do_data:
+        # data_path = args.data_dir / "corpus/train"
+        # files = sorted([f for f in data_path.parent.iterdir() if f.exists() and '.txt' in str(f)])
+        # for idx in range(args.file_num):
+            # logger.info(f"pregenetate {args.data_name}_file_{idx}.json")
+            # save_filename = data_path / f"{args.data_name}_file_{idx}.json"
+            # num_instances = 0
+            # with save_filename.open('w') as fw:
+                # for file_idx in range(len(files)):
+                    # file_path = files[file_idx]
+                    # file_examples = create_training_instances(input_file=file_path,
+                                                              # tokenizer=tokenizer,
+                                                              # max_seq_len=args.max_seq_len,
+                                                              # max_ngram=args.max_ngram,
+                                                              # short_seq_prob=args.short_seq_prob,
+                                                              # masked_lm_prob=args.masked_lm_prob,
+                                                              # max_predictions_per_seq=args.max_predictions_per_seq)
+                    # file_examples = [json.dumps(instance) for instance in file_examples]
+                    # for instance in file_examples:
+                        # fw.write(instance + '\n')
+                        # num_instances += 1
+            # metrics_file = data_path / f"{args.data_name}_file_{idx}_metrics.json"
+            # print(f"num_instances: {num_instances}")
+            # with metrics_file.open('w') as metrics_file:
+                # metrics = {
+                    # "num_training_examples": num_instances,
+                    # "max_seq_len": args.max_seq_len
+                # }
+                # metrics_file.write(json.dumps(metrics))
+
+def load_ner_model(checkpoint):
+    from model.bert_for_ner import BertSpanForNer
+
+    model = BertSpanForNer.from_pretrained(checkpoint)
+
+    return model
+
 if __name__ == '__main__':
     main()
+    # checkpoint = "../../../BERT-NER-Pytorch/outputs/cluener_output/bert/checkpoint-896/"
+    # ner_model = load_ner_model(checkpoint)
 
 '''
 python prepare_lm_data_ngram.py \
