@@ -41,25 +41,30 @@ class BertReader(BaseReader):
         # init optimzier
         lr = self.config.lr
         self.optimizer = AdamW(self.parameters(), lr=lr, correct_bias=False)
-        num_training_steps = self.config.num_epoch * self.config.num_samples / self.config.batch_size
+        num_training_steps = self.config.num_epoch * self.config.num_samples / self.config.batch_size / self.config.gradient_accumulation_steps
         num_warmup_steps = 0
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
         # init cuda
-        self.n_gpu = 0
-        if self.config.use_gpu:
+        self.n_gpu = torch.cuda.device_count()
+        if self.config.use_gpu and self.n_gpu > 0 :
             self.cuda()
-            # multi-gpu support
-            self.n_gpu = torch.cuda.device_count()
+            # fp16 support
+            if self.config.fp16:
+                try:
+                    from apex import amp
+                    self.amp = amp
+                except ImportError:
+                    raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+            self.module_list = [self.bert, self.start_head, self.end_head]
+            self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O1")
+
+            # distributed training
             if self.n_gpu > 1:
                 device_ids = list(range(self.n_gpu))
-                torch.distributed.init_process_group(backend='nccl', init_method='tcp://localhost:23456', rank=0, world_size=1)
                 self.bert = torch.nn.parallel.DistributedDataParallel(self.bert, device_ids=device_ids, output_device=device_ids[0], find_unused_parameters=True)
                 self.start_head = torch.nn.parallel.DistributedDataParallel(self.start_head, device_ids=device_ids, find_unused_parameters=True)
                 self.end_head = torch.nn.parallel.DistributedDataParallel(self.end_head, device_ids=device_ids, find_unused_parameters=True)
-                # self.bert = torch.nn.DataParallel(self.bert, device_ids=device_ids)
-                # self.start_head = torch.nn.DataParallel(self.start_head, device_ids=device_ids)
-                # self.end_head = torch.nn.DataParallel(self.end_head, device_ids=device_ids)
 
 
     @cost
@@ -79,11 +84,27 @@ class BertReader(BaseReader):
         return loss
 
 
-    def update(self, loss):
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        self.scheduler.step()
+    def update(self, loss, step):
+
+        if self.config.gradient_accumulation_steps > 1:
+            loss = loss / self.config.gradient_accumulation_steps
+
+        if self.config.fp16:
+            with self.amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            loss.backward()
+
+        if (step + 1) % self.config.gradient_accumulation_steps == 0 :
+            # clip gradients
+            # max_grad_norm = 1.0
+            # if args.fp16:
+                # torch.nn.utils.clip_grad_norm_(self.amp.master_params(self.optimizer), max_grad_norm)
+            # else:
+            #     torch.nn.utils.clip_grad_norm_(self.parameters(), max_grad_norm)
+            self.optimizer.step()
+            self.scheduler.step()
+            self.optimizer.zero_grad()
 
     def init_network(self):
         # dropout part
@@ -132,8 +153,8 @@ class BertReader(BaseReader):
         # do mask on sequencese
         seq_mask = ~attention_mask.bool()
         # seq_mask = ~attention_mask.byte()
-        start_logits = start_logits.masked_fill(seq_mask, -1e6)
-        end_logits = end_logits.masked_fill(seq_mask, -1e6)
+        start_logits = start_logits.masked_fill(seq_mask, -1e4)
+        end_logits = end_logits.masked_fill(seq_mask, -1e4)
 
         # start_labels, end_labels
         return start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels

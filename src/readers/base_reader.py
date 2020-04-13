@@ -75,7 +75,7 @@ class BaseReader(torch.nn.Module):
         """
         return 0
 
-    def update(self, loss):
+    def update(self, loss, step):
         """
             Update parameters
         """

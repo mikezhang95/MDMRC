@@ -4,6 +4,8 @@ import torch
 import csv
 import numpy as np
 from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
 
 from utils import DATA_DIR
 
@@ -25,7 +27,7 @@ def load_data(config):
 
 
 
-def get_data_loader(data, batch_size=8, split_ratio=0, shuffle=True):
+def get_data_loader(data, batch_size=8, split_ratio=0, use_gpu=False shuffle=True):
 
     # full_dataset = Dataset(data)
     full_dataset = data
@@ -37,7 +39,13 @@ def get_data_loader(data, batch_size=8, split_ratio=0, shuffle=True):
 
 
     # create dataloader w.r.t. dataset
-    train_loader = DataLoader(train_dataset, shuffle=shuffle, batch_size=batch_size, collate_fn=collate_fn)
+    if use_gpu:
+        train_dataset.local_rank = 0
+        train_sampler = DistributedSampler(train_dataset)
+    else:
+        train_sampler = RandomSampler(train_dataset)
+
+    train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, shuffle=False, batch_size=batch_size, collate_fn=collate_fn)
     return train_loader, val_loader
     
