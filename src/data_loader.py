@@ -27,7 +27,7 @@ def load_data(config):
 
 
 
-def get_data_loader(data, batch_size=8, split_ratio=0, use_gpu=False shuffle=True):
+def get_data_loader(data, batch_size=8, split_ratio=0, use_gpu=False, shuffle=True):
 
     # full_dataset = Dataset(data)
     full_dataset = data
