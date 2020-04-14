@@ -57,7 +57,10 @@ class BertReader(BaseReader):
                 except ImportError:
                     raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
             self.module_list = [self.bert, self.start_head, self.end_head]
-            self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O1")
+            if self.n_gpu == 1:
+                self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O2")
+            else:
+                self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O1")
 
             # distributed training
             if self.n_gpu > 1:
