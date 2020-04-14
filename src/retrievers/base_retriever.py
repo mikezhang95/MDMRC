@@ -91,8 +91,9 @@ class BaseRetriever(torch.nn.Module):
             index = index[:topk]
             # whether to cheat?
             if self.config.retriever_cheat and 'doc_id' in query:
-                doc_id = query["doc_id"]
-                p = self.doc_list.index(doc_id)
+                pos_doc_list = query["pos_cand"]
+                pos_doc = np.random.choice(pos_doc_list, size=1)
+                p = self.doc_list.index(pos_doc)
                 if p not in index:
                     index[-1] = p
             selected_docs = [ (self.doc_list[i], logit[i]) for i in index]
@@ -110,7 +111,19 @@ class BaseRetriever(torch.nn.Module):
 
         for query in queries:
             doc_order = query["doc_order"]
-            label = query["doc_id"]
+            pos_doc_list = query["pos_cand"] # positive label
+
+            # select a best guess
+            pos, label = np.inf, "docid"
+            for l in pos_doc_list:
+                if l in doc_order:
+                    p = doc_order.index(l)
+                else:
+                    p = 101
+                if p < pos:
+                    pos = p
+                    label = l
+
             result = topk_fn(doc_order, label, topk) 
             for i, k in enumerate(topk):
                 metric_result["top%d"%k].append(result[i])

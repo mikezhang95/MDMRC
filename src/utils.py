@@ -138,3 +138,9 @@ def find_best_model(saved_path):
     # best_epoch = (retriever_models[-1], reader_modes[-1])
     best_epoch = (retriever_models[-1], reader_models[-1])
     return best_epoch
+
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / np.sum(e_x)
+

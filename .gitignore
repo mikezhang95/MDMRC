@@ -1,7 +1,10 @@
 *.pyc
 data/raw_data/
-data/processed_data/
+data/processed_neg_new/
 data/clean_data/
 data/processed/
+data/processed
+data/processed_neg/
 outputs/
 models/
+models

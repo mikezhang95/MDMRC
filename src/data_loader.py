@@ -2,7 +2,10 @@
 import json
 import torch
 import csv
+import numpy as np
 from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
 
 from utils import DATA_DIR
 
@@ -24,7 +27,7 @@ def load_data(config):
 
 
 
-def get_data_loader(data, batch_size=8, split_ratio=0, shuffle=True):
+def get_data_loader(data, batch_size=8, split_ratio=0, use_gpu=False, shuffle=True):
 
     # full_dataset = Dataset(data)
     full_dataset = data
@@ -36,7 +39,13 @@ def get_data_loader(data, batch_size=8, split_ratio=0, shuffle=True):
 
 
     # create dataloader w.r.t. dataset
-    train_loader = DataLoader(train_dataset, shuffle=shuffle, batch_size=batch_size, collate_fn=collate_fn)
+    if use_gpu:
+        train_dataset.local_rank = 0
+        train_sampler = DistributedSampler(train_dataset)
+    else:
+        train_sampler = RandomSampler(train_dataset)
+
+    train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, shuffle=False, batch_size=batch_size, collate_fn=collate_fn)
     return train_loader, val_loader
     
@@ -60,23 +69,38 @@ def save_badcase(metric1, metric2, data_loader, f):
     for i in range(num_samples):
         if metric2["top1"][i]==1 and metric2["rouge"][i] > 0.5:
             continue
+
         else: # badcase
             query = dataset[i]
             qid = query["question_id"]
             q = query["context"]
-            did = query["doc_id"]
             ans = query["answer"]
-            did_pred = query["doc_id_pred"]
+            did_pred = query["doc_id_pred"] 
             ans_pred = query["answer_pred"]
-
             doc_order = query["doc_order"]
-            if did in doc_order:
-                pos = str(doc_order.index(did))
-            else:
+            pos_doc_list = query["pos_cand"] # positive label list 
+            did = "||".join(pos_doc_list)
+
+            pos  = np.inf
+            for l in pos_doc_list:
+                if l in doc_order:
+                    p = doc_order.index(l)
+                else:
+                    p = 101
+                if p < pos:
+                    pos = p
+            if pos > 100:
                 pos = ">100"
+            else:
+                pos = str(pos)
+            if did_pred in doc_order:
+                pos_pred = str(doc_order.index(did_pred))
+            else:
+                pos_pred = ">100"
+
             rouge = metric2["rouge"][i]
 
-            record = [qid, q, did, ans, did_pred, ans_pred, pos, rouge]
+            record = [qid, q, did, ans, pos, did_pred, ans_pred, pos_pred, rouge]
             
             topk = len(query["doc_candidates"])
             for c in query["doc_candidates"]:
@@ -86,7 +110,7 @@ def save_badcase(metric1, metric2, data_loader, f):
     # write to csv
     writer = csv.writer(f)
     topk_head = ["top%d"%(i+1) for i in range(topk)]
-    head = ["q_id","question", "doc_id", "answer", "doc_id_pred", "answer_pred", "doc_order","rouge"] + topk_head
+    head = ["q_id","question", "doc_id", "answer", "doc_pos", "doc_id_pred", "answer_pred", "doc_pos_pred","rouge"] + topk_head
 
     writer.writerow(head)
     writer.writerows(records)

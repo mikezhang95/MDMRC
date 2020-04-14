@@ -11,8 +11,10 @@ import os
 import sys
 import time
 import json
+import math
 import logging
 import argparse
+import torch
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../'
 sys.path.append(os.path.join(BASE_DIR, "src"))
@@ -40,6 +42,12 @@ config = Pack(json.load(open(config_path)))
 config["forward_only"] = args.forward_only
 config["debug"] = args.debug
 
+# set gpu
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = config.gpu_ids
+config.use_gpu = torch.cuda.device_count() > 0
+if config.use_gpu:
+    torch.distributed.init_process_group(backend='nccl', init_method='tcp://localhost:23456', rank=0, world_size=1)
 
 # set random_seed/logger/save_path
 set_seed(config.random_seed)
@@ -51,20 +59,17 @@ if not os.path.exists(saved_path):
 config.saved_path = saved_path
 prepare_dirs_loggers(config)
 
-
 # start logger
 logger = logging.getLogger()
 start_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
 logger.info('[START]\n{}\n{}'.format(start_time, '=' * 30))
 
-
-
-
 # load dataset 
 train_data, test_data, documents = load_data(config)
 # split dataset into train/val 4:1
-train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2, shuffle=True)
-test_loader,_ = get_data_loader(test_data, batch_size=config.batch_size, split_ratio=0.0, shuffle=False)
+config.batch_size = math.floor(config.batch_size*1.0/config.gradient_accumulation_steps)
+train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2, use_gpu=config.use_gpu, shuffle=True)
+test_loader,_ = get_data_loader(test_data, batch_size=config.batch_size, split_ratio=0.0, use_gpu=config.use_gpu, shuffle=False)
 config["num_samples"]= len(train_data)
 
 
@@ -74,6 +79,7 @@ retriever = retriever_class(documents, config)
 reader_class = getattr(readers, config.reader_name)
 reader = reader_class(documents, config)
 model = (retriever, reader)
+
 
 # load pretrain model before training
 if not config.forward_only and config.pretrain_folder != "":

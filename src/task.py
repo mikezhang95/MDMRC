@@ -39,12 +39,13 @@ def train(model, train_loader, val_loader, config):
         reader.train()
 
         num_batch = len(train_loader)
+        train_loader.sampler.set_epoch(epoch)
         for batch_cnt, batch in enumerate(train_loader):
             # BATCH
             loss_r1 =  retriever.retrieve(batch, mode="train")
             loss_r2 = reader.read(batch,mode="train")
             retriever.update(loss_r1)
-            reader.update(loss_r2)
+            reader.update(loss_r2, batch_cnt)
 
             # print training loss every print_frequency batch
             if (batch_cnt+1) % config.print_frequency == 0:

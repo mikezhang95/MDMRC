@@ -41,25 +41,33 @@ class BertReader(BaseReader):
         # init optimzier
         lr = self.config.lr
         self.optimizer = AdamW(self.parameters(), lr=lr, correct_bias=False)
-        num_training_steps = self.config.num_epoch * self.config.num_samples / self.config.batch_size
+        num_training_steps = self.config.num_epoch * self.config.num_samples / self.config.batch_size / self.config.gradient_accumulation_steps
         num_warmup_steps = 0
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
         # init cuda
-        self.n_gpu = 0
-        if self.config.use_gpu:
+        self.n_gpu = torch.cuda.device_count()
+        if self.config.use_gpu and self.n_gpu > 0 :
             self.cuda()
-            # multi-gpu support
-            self.n_gpu = torch.cuda.device_count()
+            # fp16 support
+            if self.config.fp16:
+                try:
+                    from apex import amp
+                    self.amp = amp
+                except ImportError:
+                    raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+            self.module_list = [self.bert, self.start_head, self.end_head]
+            if self.n_gpu == 1:
+                self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O2")
+            else:
+                self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O1")
+
+            # distributed training
             if self.n_gpu > 1:
                 device_ids = list(range(self.n_gpu))
-                torch.distributed.init_process_group(backend='nccl', init_method='tcp://localhost:23456', rank=0, world_size=1)
                 self.bert = torch.nn.parallel.DistributedDataParallel(self.bert, device_ids=device_ids, output_device=device_ids[0], find_unused_parameters=True)
                 self.start_head = torch.nn.parallel.DistributedDataParallel(self.start_head, device_ids=device_ids, find_unused_parameters=True)
                 self.end_head = torch.nn.parallel.DistributedDataParallel(self.end_head, device_ids=device_ids, find_unused_parameters=True)
-                # self.bert = torch.nn.DataParallel(self.bert, device_ids=device_ids)
-                # self.start_head = torch.nn.DataParallel(self.start_head, device_ids=device_ids)
-                # self.end_head = torch.nn.DataParallel(self.end_head, device_ids=device_ids)
 
 
     @cost
@@ -79,11 +87,27 @@ class BertReader(BaseReader):
         return loss
 
 
-    def update(self, loss):
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        self.scheduler.step()
+    def update(self, loss, step):
+
+        if self.config.gradient_accumulation_steps > 1:
+            loss = loss / self.config.gradient_accumulation_steps
+
+        if self.config.fp16:
+            with self.amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            loss.backward()
+
+        if (step + 1) % self.config.gradient_accumulation_steps == 0 :
+            # clip gradients
+            # max_grad_norm = 1.0
+            # if args.fp16:
+                # torch.nn.utils.clip_grad_norm_(self.amp.master_params(self.optimizer), max_grad_norm)
+            # else:
+            #     torch.nn.utils.clip_grad_norm_(self.parameters(), max_grad_norm)
+            self.optimizer.step()
+            self.scheduler.step()
+            self.optimizer.zero_grad()
 
     def init_network(self):
         # dropout part
@@ -132,8 +156,8 @@ class BertReader(BaseReader):
         # do mask on sequencese
         seq_mask = ~attention_mask.bool()
         # seq_mask = ~attention_mask.byte()
-        start_logits = start_logits.masked_fill(seq_mask, -1e6)
-        end_logits = end_logits.masked_fill(seq_mask, -1e6)
+        start_logits = start_logits.masked_fill(seq_mask, -1e4)
+        end_logits = end_logits.masked_fill(seq_mask, -1e4)
 
         # start_labels, end_labels
         return start_logits, end_logits, input_seqs, query_lens, start_labels, end_labels
@@ -180,12 +204,13 @@ class BertReader(BaseReader):
                 query_lens.append(2 + len(text_a))
 
                 # create label for training
-                if "doc_id" in query and doc_id == query["doc_id"]:
+                if "pos_cand" in query and doc_id in query["pos_cand"]:
+                    i = query["pos_cand"].index(doc_id)
                     # start_labels.append(query_lens[-1] + query["start_bert"])
                     # end_labels.append(query_lens[-1] + query["end_bert"])
                     try:
-                        start_labels.append(query_lens[-1] + orig_to_tok_index[query["start"]])
-                        end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"]])
+                        start_labels.append(query_lens[-1] + orig_to_tok_index[query["start"][i]])
+                        end_labels.append(query_lens[-1] + orig_to_tok_index[query["end"][i]])
                     except:
                         print(len(doc["context"]),len(doc["bert_cut"]))
                         print(query["start"], query["end"], doc)
@@ -244,7 +269,7 @@ class BertReader(BaseReader):
             i += num
 
             # find best span according to the logit 
-            span, doc_cnt = find_best_answer(query_len, start_logit, end_logit)
+            span, doc_cnt, records = find_best_answer(query_len, start_logit, end_logit)
 
             doc_id = query["doc_candidates"][doc_cnt][0]
             doc = self.documents[doc_id]
@@ -268,7 +293,14 @@ class BertReader(BaseReader):
                 # print(tok_to_orig_index[-1])
                 # raise NotImplementedError
 
+
+#             qid = query["question_id"]
+            # for ii, record in enumerate(records):
+                # did = query["doc_candidates"][ii][0]
+                # logit = "\t".join(record)
+                # wf.write("{}\t{}\t{}\n".format(qid, did, logit))
             
+# wf = open("bert_logits.txt", "a")
 
 
 # Method 1: y = max_z argmax_y[ p(y|z,x) ]
@@ -277,7 +309,8 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
     best_span = (0, 0)
     best_score = -np.inf
     best_doc = 0
-
+    records = []
+    
     # for some documents
     doc_cnt = -1
     for length, start_logit, end_logit in zip(query_lens, start_logits, end_logits):
@@ -296,7 +329,9 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
             best_span = span 
             best_doc = doc_cnt
 
-    return best_span, best_doc
+        records.append([str(to_numpy(start_logit[i])), str(to_numpy(end_logit[j])), str(to_numpy(start_logit[0])), str(to_numpy(end_logit[0]))])
+
+    return best_span, best_doc, records
 
 
 
