@@ -42,7 +42,7 @@ class BertReader(BaseReader):
         lr = self.config.lr
         self.optimizer = AdamW(self.parameters(), lr=lr, correct_bias=False)
         num_training_steps = self.config.num_epoch * self.config.num_samples / self.config.batch_size / self.config.gradient_accumulation_steps
-        num_warmup_steps = 0
+        num_warmup_steps = int(num_training_steps * 0.1)
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
         # init cuda
@@ -55,15 +55,15 @@ class BertReader(BaseReader):
                     from apex import amp
                     self.amp = amp
                 except ImportError:
-                    raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-            self.module_list = [self.bert, self.start_head, self.end_head]
-            if self.n_gpu == 1:
-                self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O2")
-            else:
-                self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O1")
+                        raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+                self.module_list = [self.bert, self.start_head, self.end_head]
+                if self.n_gpu == 1:
+                    self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O2")
+                else:
+                    self.module_list, optimizer = self.amp.initialize(self.module_list, self.optimizer, opt_level="O1")
 
             # distributed training
-            if self.n_gpu > 1:
+            if self.n_gpu > 0:
                 device_ids = list(range(self.n_gpu))
                 self.bert = torch.nn.parallel.DistributedDataParallel(self.bert, device_ids=device_ids, output_device=device_ids[0], find_unused_parameters=True)
                 self.start_head = torch.nn.parallel.DistributedDataParallel(self.start_head, device_ids=device_ids, find_unused_parameters=True)
