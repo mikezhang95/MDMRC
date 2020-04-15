@@ -11,6 +11,7 @@ import time
 import json
 import logging
 import numpy as np
+from tqdm import tqdm
 
 from data_loader import get_data_loader, save_badcase
 from utils import merge_dict
@@ -156,9 +157,7 @@ def generate(model, data_loader, pred_f=None, logit_f=None):
     retriever.eval()
     reader.eval()
 
-    for i, batch in enumerate(data_loader):
-
-        logger.info("Batch {}/{}".format(i, len(data_loader)))
+    for i, batch in tqdm(enumerate(data_loader)):
 
         with torch.no_grad():
             # 1. retriever forward
