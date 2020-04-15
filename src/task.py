@@ -146,9 +146,10 @@ def validate(model, data_loader, f=None):
     return loss_retriever, loss_reader
 
 
-def generate(model, data_loader, f):
-    f.write("id\tdocid\tanswer\n")
-    lines = []
+def generate(model, data_loader, pred_f=None, logit_f=None):
+
+    if pred_f is not None:
+        pred_f.write("id\tdocid\tanswer\n")
 
     # models
     retriever, reader = model
@@ -170,9 +171,18 @@ def generate(model, data_loader, f):
                 qid = query["question_id"]
                 docid = query["doc_id_pred"].split("-")[0]
                 answer = query["answer_pred"]
-                lines.append("%s\t%s\t%s\n"%(qid, docid, answer))
-    
-    f.write("".join(lines))
+
+                # write predictions
+                if pred_f is not None:
+                    pred_f.write("%s\t%s\t%s\n"%(qid, docid, answer))
+
+                # write logits
+                if logit_f is not None:
+                    records = query["records"]
+                    for ii, record in enumerate(records):
+                        did = query["doc_candidates"][ii][0]
+                        logit = "\t".join(record)
+                        logit_f.write("{}\t{}\t{}\n".format(qid, did, logit))
 
     logger.info('--- Generation Done ---')
     return 
