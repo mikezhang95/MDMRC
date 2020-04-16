@@ -8,3 +8,5 @@ data/processed_neg/
 outputs/
 models/
 models
+.ipynb_checkpoints/
+configs/.ipynb_checkpoints/
