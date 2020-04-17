@@ -33,6 +33,10 @@ parser.add_argument('--config_name', type=str, default="bm25_bert")
 parser.add_argument('--forward_only', action='store_true')
 parser.add_argument('--alias', type=str, default="")
 parser.add_argument('--debug', action='store_true')
+parser.add_argument('--add_gp',action='store_true')
+parser.add_argument('--gp_epsilon',type=float,default=0.4)
+parser.add_argument('--add_noise_labels',action='store_true')
+parser.add_argument('--noise_labels_offset_bound',type=int,default=1)#s,e offset
 args = parser.parse_args()
 
 
@@ -41,6 +45,12 @@ config_path = BASE_DIR + "configs/" + args.config_name + ".conf"
 config = Pack(json.load(open(config_path)))
 config["forward_only"] = args.forward_only
 config["debug"] = args.debug
+config["add_gp"]=args.add_gp
+if(args.add_gp):
+    config["gp_epsilon"]=args.gp_epsilon
+config["add_noise_labels"]=args.add_noise_labels
+if(args.add_noise_labels):
+    config["noise_labels_offset_bound"]=args.noise_labels_offset_bound
 
 # set gpu
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -69,7 +79,7 @@ train_data, test_data, documents = load_data(config)
 # split dataset into train/val 4:1
 config.batch_size = math.floor(config.batch_size*1.0/config.gradient_accumulation_steps)
 train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2, use_gpu=config.use_gpu, shuffle=True)
-test_loader,_ = get_data_loader(test_data, batch_size=config.batch_size, split_ratio=0.0, use_gpu=config.use_gpu, shuffle=False)
+test_loader,_ = get_data_loader(test_data, batch_size=config.test_batch_size, split_ratio=0.0, use_gpu=config.use_gpu, shuffle=False)
 config["num_samples"]= len(train_data)
 
 

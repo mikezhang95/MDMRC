@@ -1,7 +1,7 @@
 """
     This is the virtual base class of retriever
 """
-
+import random
 import torch
 from torch.nn import Dropout, Linear, RReLU
 from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup, BertModel
@@ -154,8 +154,8 @@ class BertReader(BaseReader):
 
 
         # do mask on sequencese
-        seq_mask = ~attention_mask.bool()
-        # seq_mask = ~attention_mask.byte()
+#         seq_mask = ~attention_mask.bool()
+        seq_mask = ~attention_mask.byte()
         start_logits = start_logits.masked_fill(seq_mask, -1e4)
         end_logits = end_logits.masked_fill(seq_mask, -1e4)
 
@@ -238,18 +238,49 @@ class BertReader(BaseReader):
         end_labels = to_torch(np.stack(end_labels).reshape(-1), use_gpu=self.config.use_gpu)
 
         return input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels
-
+    
+    def add_noise_to_labels(start_positions,end_positions):
+        bound=self.config.noise_labels_offset_bound
+        for i in range(len(start_positions)):
+            s=start_positions[i]
+            e=end_positions[i]
+            if(e-s<=bound+1):
+                continue
+            start_positions[i]=max(0,s+random.randint(-bound,bound))
+            end_positions[i]=max(s,e+random.randint(-bound,bound))
+        return start_positions,end_positions
 
     def compute_loss(self, start_logits, end_logits, start_labels, end_labels):
         """
         """
         loss_fn = torch.nn.CrossEntropyLoss()
+        if self.config.add_noise_labels: #在start，end标签上加入小幅随机偏移（对抗噪声）
+            start_labels, end_labels = self.add_noise_to_labels(start_labels, end_labels)
         start_loss = loss_fn(start_logits, start_labels)
         end_loss = loss_fn(end_logits, end_labels)
         loss = start_loss + end_loss
+        if self.config.add_gp: #加入grandient penalty
+            loss += self.grad_penalty(loss)
         return loss
-
-
+    
+    def grad_penalty(self,loss):
+        if loss.requires_grad==False: #val
+            return 0
+        #train
+        ori_grad=[param.grad for param in self.parameters()]
+        loss.backward(retain_graph=True)
+        penalty_loss=0
+        module=self.bert.module if self.n_gpu>0 else self.bert
+        for i,param in enumerate(module.embeddings.parameters()):
+            if ori_grad[i] is None:
+                penalty_loss+=torch.norm(param.grad,p='fro')
+            else:
+                penalty_loss+=torch.norm(param.grad-ori_grad[i],p='fro')
+        penalty_loss*=self.config.gp_epsilon
+        #recover
+        for i,param in enumerate(self.parameters()):
+            param.grad=ori_grad[i]
+        return penalty_loss
 
     def predict(self, queries, start_logits, end_logits, input_seqs, query_lens):
         """

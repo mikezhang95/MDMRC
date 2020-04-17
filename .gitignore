@@ -10,3 +10,5 @@ models/
 models
 .ipynb_checkpoints/
 configs/.ipynb_checkpoints/
+outputs
+outputs/
