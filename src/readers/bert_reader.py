@@ -247,11 +247,27 @@ class BertReader(BaseReader):
             e=end_positions[i]
             if(e-s<=bound+1):
                 continue
-            start_positions[i]=max(0,s+random.randint(-bound,bound))
+            start_positions[i]=max(1,s+random.randint(-bound,bound))
             end_positions[i]=max(s,e+random.randint(-bound,bound))
-        start_positions.clamp_(0, ignored_index)
-        end_positions.clamp_(0, ignored_index)
+        start_positions.clamp_(1, ignored_index) #omit [CLS]
+        end_positions.clamp_(1, ignored_index) #omit [CLS]
         return start_positions,end_positions
+    
+    def typeloss(self,ss,es,sp,ep):
+        """
+        position的标签1为负样本（0处的分数越大），0为正样本
+        NOTE:sp,ep所指的tensor也发生了变化（in-place）
+        """
+        for i in range(len(sp)):
+            if(sp[i].item()!=0 or ep[i].item()!=0):
+                sp[i]=ep[i]=0
+            else:
+                sp[i]=ep[i]=1
+        ss,es=ss[:,0].float(),es[:,0].float()
+        cr=torch.nn.BCEWithLogitsLoss()
+        ret=cr(ss,sp.float())+cr(es,ep.float())
+        ret*=self.config.typeloss_epsilon
+        return ret
 
     def compute_loss(self, start_logits, end_logits, start_labels, end_labels):
         """
@@ -266,6 +282,8 @@ class BertReader(BaseReader):
         loss = start_loss + end_loss
         if self.config.add_gp: #加入grandient penalty
             loss += self.grad_penalty(loss)
+        if self.config.add_typeloss: #加入二分类损失
+            loss += self.typeloss(start_logits,end_logits,start_labels_n,end_labels_n)
         return loss
     
     def grad_penalty(self,loss):
@@ -285,6 +303,8 @@ class BertReader(BaseReader):
         #recover
         for i,param in enumerate(self.parameters()):
             param.grad=ori_grad[i]
+            
+        del ori_grad,module
         return penalty_loss
 
     def predict(self, queries, start_logits, end_logits, input_seqs, query_lens):

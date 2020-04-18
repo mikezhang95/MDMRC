@@ -38,6 +38,8 @@ parser.add_argument('--add_gp',action='store_true')
 parser.add_argument('--gp_epsilon',type=float,default=0.4)
 parser.add_argument('--add_noise_labels',action='store_true')
 parser.add_argument('--noise_labels_offset_bound',type=int,default=1)#s,e offset
+parser.add_argument('--add_typeloss',action='store_true')
+parser.add_argument('--typeloss_epsilon',type=float,default=1)
 args = parser.parse_args()
 
 
@@ -47,12 +49,15 @@ config = Pack(json.load(open(config_path)))
 config["forward_only"] = args.forward_only
 config["debug"] = args.debug
 config["add_gp"]=args.add_gp
-if(args.add_gp):
-    config["gp_epsilon"]=args.gp_epsilon
 config["add_noise_labels"]=args.add_noise_labels
-if(args.add_noise_labels):
+config["add_typeloss"]=args.add_typeloss
+if args.add_gp:
+    config["gp_epsilon"]=args.gp_epsilon
+if args.add_noise_labels:
     config["noise_labels_offset_bound"]=args.noise_labels_offset_bound
-
+if args.add_typeloss:
+    config["typeloss_epsilon"]=args.typeloss_epsilon
+    
 # set gpu
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = config.gpu_ids
