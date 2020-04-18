@@ -2,6 +2,7 @@
     This is the virtual base class of retriever
 """
 import random
+import copy
 import torch
 from torch.nn import Dropout, Linear, RReLU
 from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup, BertModel
@@ -239,7 +240,7 @@ class BertReader(BaseReader):
 
         return input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels
     
-    def add_noise_to_labels(start_positions,end_positions):
+    def add_noise_to_labels(self,start_positions,end_positions,ignored_index):
         bound=self.config.noise_labels_offset_bound
         for i in range(len(start_positions)):
             s=start_positions[i]
@@ -248,16 +249,20 @@ class BertReader(BaseReader):
                 continue
             start_positions[i]=max(0,s+random.randint(-bound,bound))
             end_positions[i]=max(s,e+random.randint(-bound,bound))
+        start_positions.clamp_(0, ignored_index)
+        end_positions.clamp_(0, ignored_index)
         return start_positions,end_positions
 
     def compute_loss(self, start_logits, end_logits, start_labels, end_labels):
         """
         """
-        loss_fn = torch.nn.CrossEntropyLoss()
+        ignored_index=start_logits.size()[1]
+        loss_fn = torch.nn.CrossEntropyLoss(ignore_index=ignored_index)
+        start_labels_n,end_labels_n=copy.deepcopy(start_labels),copy.deepcopy(end_labels)
         if self.config.add_noise_labels: #在start，end标签上加入小幅随机偏移（对抗噪声）
-            start_labels, end_labels = self.add_noise_to_labels(start_labels, end_labels)
-        start_loss = loss_fn(start_logits, start_labels)
-        end_loss = loss_fn(end_logits, end_labels)
+            start_labels_n, end_labels_n = self.add_noise_to_labels(start_labels_n, end_labels_n,ignored_index)
+        start_loss = loss_fn(start_logits, start_labels_n)
+        end_loss = loss_fn(end_logits, end_labels_n)
         loss = start_loss + end_loss
         if self.config.add_gp: #加入grandient penalty
             loss += self.grad_penalty(loss)
@@ -349,7 +354,9 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
         doc_cnt += 1
         # for one document
         s = length
+#         print(f"s={s},sl={start_logit}")
         i = to_numpy(torch.argmax(start_logit[s:])) + s 
+#         print(f"i={i},el={end_logit}")
         j = to_numpy(torch.argmax(end_logit[i:])) + i
         score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
         span = (i-s,j-s)

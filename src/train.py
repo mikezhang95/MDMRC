@@ -33,6 +33,7 @@ parser.add_argument('--config_name', type=str, default="bm25_bert")
 parser.add_argument('--forward_only', action='store_true')
 parser.add_argument('--alias', type=str, default="")
 parser.add_argument('--debug', action='store_true')
+parser.add_argument('--localhost',type=str,default="23456")
 parser.add_argument('--add_gp',action='store_true')
 parser.add_argument('--gp_epsilon',type=float,default=0.4)
 parser.add_argument('--add_noise_labels',action='store_true')
@@ -57,7 +58,7 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = config.gpu_ids
 config.use_gpu = torch.cuda.device_count() > 0
 if config.use_gpu:
-    torch.distributed.init_process_group(backend='nccl', init_method='tcp://localhost:23456', rank=0, world_size=1)
+    torch.distributed.init_process_group(backend='nccl', init_method=f'tcp://localhost:{args.localhost}', rank=0, world_size=1)
 
 # set random_seed/logger/save_path
 set_seed(config.random_seed)
