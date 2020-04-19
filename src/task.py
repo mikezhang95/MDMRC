@@ -10,6 +10,7 @@ import sys
 import time
 import json
 import logging
+import math
 import numpy as np
 
 from data_loader import get_data_loader, save_badcase
@@ -21,8 +22,13 @@ logger = logging.getLogger()
 def train(model, train_loader, val_loader, config):
 
     # training parameters
+    """
+    NOTE: best_epoch不再代表最好效果的那一个epoch，而代表最好效果的那个step后那个point（考虑到grad_acc，所以一个update_batch一个step）
+    结合best_epoch,num_batch,grad_acc可以知道所存模型处于哪个epoch的第几个batch的阶段保存的
+    """
     best_epoch_retriever, best_loss_retriever = 0, np.inf
     best_epoch_reader, best_loss_reader = 0, np.inf
+    best_rouge = 0.78
 
     # models
     retriever, reader = model
@@ -39,6 +45,8 @@ def train(model, train_loader, val_loader, config):
         reader.train()
 
         num_batch = len(train_loader)
+        num_update_batch = math.ceil(num_batch/config.gradient_accumulation_steps)
+        val_frequency = int(config.val_epoch_ratio*num_update_batch)
         train_loader.sampler.set_epoch(epoch)
         for batch_cnt, batch in enumerate(train_loader):
             # BATCH
@@ -50,42 +58,45 @@ def train(model, train_loader, val_loader, config):
             # print training loss every print_frequency batch
             if (batch_cnt+1) % config.print_frequency == 0:
                 logger.info("{}/{} Batch Loss: Retriever-{:.4f}  Reader-{:.4f}".format(batch_cnt+1, num_batch, loss_r1, loss_r2))
+            
 
-        # Evaluate at the end of every epoch
-        cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
-        logger.info('==== Evaluating Model at {} ===='.format(cur_time))
+            # Evaluate at the end of every [val_epoch_ratio] epoch
+            if batch_cnt%config.gradient_accumulation_steps == 0 and (batch_cnt//config.gradient_accumulation_steps+1) % val_frequency == 0:
+                cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+                logger.info('==== Evaluating Model at {}({}/{}) ===='.format(cur_time,batch_cnt+1,num_batch))
 
-        # Validation (loss)
-        loss_retriever, loss_reader = validate(model, val_loader)
+                # Validation (loss)
+                loss_retriever, loss_reader, temp_rouge = validate(model, val_loader)
 
-        # Save Retriever
-        if loss_retriever < best_loss_retriever:
-            best_loss_retriever = loss_retriever 
+                # Save Retriever
+                if loss_retriever < best_loss_retriever:
+                    best_loss_retriever = loss_retriever 
 
-            cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
-            logger.info('*** Retriever Saved with valid_loss = {}, at {}. ***'.format(loss_retriever, cur_time))
-            retriever.save(config.saved_path, epoch)
-            best_epoch_retriever = epoch
-            saved_models_retriever.append(epoch)
-            if len(saved_models_retriever) > last_n_model:
-                remove_model = saved_models_retriever[0]
-                saved_models_retriever = saved_models_retriever[-last_n_model:]
-                os.remove(os.path.join(config.saved_path, "{}-retriever".format(remove_model)))
+                    cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+                    logger.info('*** Retriever Saved with valid_loss = {}, at {}. ***'.format(loss_retriever, cur_time))
+                    best_epoch_retriever = epoch*num_update_batch + batch_cnt//config.gradient_accumulation_steps
+                    retriever.save(config.saved_path, best_epoch_retriever)
+                    saved_models_retriever.append(best_epoch_retriever)
+                    if len(saved_models_retriever) > last_n_model:
+                        remove_model = saved_models_retriever[0]
+                        saved_models_retriever = saved_models_retriever[-last_n_model:]
+                        os.remove(os.path.join(config.saved_path, "{}-retriever".format(remove_model)))
 
-        # Save Reader
-        # if loss_reader < best_loss_reader :
-        if loss_reader < best_loss_reader + 0.5: # give 0.5 load 
-            best_loss_reader = min(best_loss_reader, loss_reader)
+                # Save Reader
+                # if loss_reader < best_loss_reader :
+                if loss_reader < best_loss_reader + 0.5 or temprouge >= best_rouge: # give 0.5 load 
+                    best_loss_reader = min(best_loss_reader, loss_reader)
+                    best_rouge = temp_rouge
 
-            cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
-            logger.info('*** reader Saved with valid_loss = {}, at {}. ***'.format(loss_reader, cur_time))
-            reader.save(config.saved_path, epoch)
-            best_epoch_reader = epoch
-            saved_models_reader.append(epoch)
-            if len(saved_models_reader) > last_n_model:
-                remove_model = saved_models_reader[0]
-                saved_models_reader = saved_models_reader[-last_n_model:]
-                os.remove(os.path.join(config.saved_path, "{}-reader".format(remove_model)))
+                    cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+                    logger.info('*** reader Saved with (valid_loss,rouge) = ({},{}), at {}. ***'.format(loss_reader, temp_rouge, cur_time))
+                    best_epoch_reader = epoch*num_update_batch + batch_cnt//config.gradient_accumulation_steps
+                    reader.save(config.saved_path, best_epoch_reader)
+                    saved_models_reader.append(best_epoch_reader)
+                    if len(saved_models_reader) > last_n_model:
+                        remove_model = saved_models_reader[0]
+                        saved_models_reader = saved_models_reader[-last_n_model:]
+                        os.remove(os.path.join(config.saved_path, "{}-reader".format(remove_model)))
 
 
     logger.info("Training Ends.\nBest Validation Loss:\n - Retriever {:.4f} at Epcoh {}\n - Reader {:.4f} at Epoch {}\n".format(best_loss_retriever, best_epoch_retriever,best_loss_reader, best_epoch_reader))
@@ -143,7 +154,7 @@ def validate(model, data_loader, f=None):
     logger.info('--- Reader loss = {} ---'.format(loss_reader))
     logger.info(json.dumps(metric_reader))
 
-    return loss_retriever, loss_reader
+    return loss_retriever, loss_reader, metric_reader["rouge"]
 
 
 def generate(model, data_loader, f):

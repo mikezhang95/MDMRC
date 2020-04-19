@@ -40,6 +40,7 @@ parser.add_argument('--add_noise_labels',action='store_true')
 parser.add_argument('--noise_labels_offset_bound',type=int,default=1)#s,e offset
 parser.add_argument('--add_typeloss',action='store_true')
 parser.add_argument('--typeloss_epsilon',type=float,default=1)
+parser.add_argument('--val_epoch_ratio',type=float,default=1)
 args = parser.parse_args()
 
 
@@ -51,6 +52,7 @@ config["debug"] = args.debug
 config["add_gp"]=args.add_gp
 config["add_noise_labels"]=args.add_noise_labels
 config["add_typeloss"]=args.add_typeloss
+config["val_epoch_ratio"]=args.val_epoch_ratio
 if args.add_gp:
     config["gp_epsilon"]=args.gp_epsilon
 if args.add_noise_labels:
@@ -102,10 +104,15 @@ if not config.forward_only and config.pretrain_folder != "":
     pretrain_path = os.path.join(stats_path, config.pretrain_folder)
     logger.info(f"use pretrain in dir {pretrain_path}")
     best_epoch = find_best_model(pretrain_path)
+    logger.info(f"[retriever,reader]={best_epoch}")
     retriever.load(pretrain_path, best_epoch[0])
     reader.load(pretrain_path, best_epoch[1])
 
 ##################### Training #####################
+"""
+NOTE: best_epoch不再代表最好效果的那一个epoch，而代表最好效果的那个step后那个point（考虑到grad_acc，所以一个update_batch一个step）
+结合best_epoch,num_batch,grad_acc可以知道所存模型处于哪个epoch的第几个batch的阶段保存的
+"""
 best_epoch = None
 if not config.forward_only:
     # save config
