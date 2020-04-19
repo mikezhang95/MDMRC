@@ -253,19 +253,22 @@ class BertReader(BaseReader):
         end_positions.clamp_(1, ignored_index) #omit [CLS]
         return start_positions,end_positions
     
-    def typeloss(self,ss,es,sp,ep):
+    def typeloss(self,ss,es,mysp,myep):
         """
         position的标签1为负样本（0处的分数越大），0为正样本
         NOTE:sp,ep所指的tensor也发生了变化（in-place）
         """
+        sp,ep=copy.deepcopy(mysp),copy.deepcopy(myep)
         for i in range(len(sp)):
             if(sp[i].item()!=0 or ep[i].item()!=0):
                 sp[i]=ep[i]=0
             else:
                 sp[i]=ep[i]=1
+        sp=sp.float().detach()
+        ep=ep.float().detach()
         ss,es=ss[:,0].float(),es[:,0].float()
         cr=torch.nn.BCEWithLogitsLoss()
-        ret=cr(ss,sp.float())+cr(es,ep.float())
+        ret=cr(ss,sp)+cr(es,ep)
         ret*=self.config.typeloss_epsilon
         return ret
 

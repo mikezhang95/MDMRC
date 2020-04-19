@@ -100,6 +100,7 @@ model = (retriever, reader)
 # load pretrain model before training
 if not config.forward_only and config.pretrain_folder != "":
     pretrain_path = os.path.join(stats_path, config.pretrain_folder)
+    logger.info(f"use pretrain in dir {pretrain_path}")
     best_epoch = find_best_model(pretrain_path)
     retriever.load(pretrain_path, best_epoch[0])
     reader.load(pretrain_path, best_epoch[1])
