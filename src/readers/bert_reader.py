@@ -322,6 +322,9 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
             best_span = span 
             best_doc = doc_cnt
 
+        # ss = [str(e) for e in to_numpy(start_logit)]
+        # ee = [str(e) for e in to_numpy(end_logit)]
+        # records.append([str(length), " ".join(ss), " ".join(ee)])
         records.append([str(to_numpy(start_logit[i])), str(to_numpy(end_logit[j])), str(to_numpy(start_logit[0])), str(to_numpy(end_logit[0]))])
 
     return best_span, best_doc, records
