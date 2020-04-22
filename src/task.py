@@ -84,13 +84,13 @@ def train(model, train_loader, val_loader, config):
 
                 # Save Reader
                 # if loss_reader < best_loss_reader :
-                if loss_reader < best_loss_reader + 0.5 or temprouge >= best_rouge: # give 0.5 load 
+                if loss_reader <= best_loss_reader or temp_rouge >= best_rouge: # give 0.5 load 
                     best_loss_reader = min(best_loss_reader, loss_reader)
-                    best_rouge = temp_rouge
+                    best_rouge = min(best_rouge,temp_rouge)
 
                     cur_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
-                    logger.info('*** reader Saved with (valid_loss,rouge) = ({},{}), at {}. ***'.format(loss_reader, temp_rouge, cur_time))
                     best_epoch_reader = epoch*num_update_batch + batch_cnt//config.gradient_accumulation_steps
+                    logger.info('*** {}-reader Saved with (valid_loss,rouge) = ({},{}), at {}. ***'.format(best_epoch_reader,loss_reader, temp_rouge, cur_time))
                     reader.save(config.saved_path, best_epoch_reader)
                     saved_models_reader.append(best_epoch_reader)
                     if len(saved_models_reader) > last_n_model:
