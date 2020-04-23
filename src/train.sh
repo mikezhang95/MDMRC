@@ -1,7 +1,7 @@
-python train.py --config_name bm25top30v2-hardneg-albert_xlarge \
-                --localhost 23459 \
-                --val_epoch_ratio 0.125 \
-                --alias basedNoise-bsz64 \
+python train.py --config_name EFV+bm25top30v2-hardneg-albert_xlarge \
+                --localhost 29119 \
+                --val_epoch_ratio 0.2 \
+#                 --alias  \
 #                 --add_gp \
 #                 --gp_epsilon 2 \
                 
