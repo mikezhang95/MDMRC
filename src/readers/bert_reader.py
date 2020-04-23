@@ -99,9 +99,9 @@ class BertReader(BaseReader):
             loss.backward()
 
         if (step + 1) % self.config.gradient_accumulation_steps == 0 :
-            # clip gradients
-            # max_grad_norm = 1.0
-            # if args.fp16:
+            # # clip gradients
+            # max_grad_norm = 5.0
+            # if self.config.fp16:
                 # torch.nn.utils.clip_grad_norm_(self.amp.master_params(self.optimizer), max_grad_norm)
             # else:
             #     torch.nn.utils.clip_grad_norm_(self.parameters(), max_grad_norm)
