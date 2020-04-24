@@ -145,9 +145,9 @@ class AlbertReaderEFV(BertReader):
         efv_labels=copy.deepcopy(start_labels)
         for i,label in enumerate(efv_labels):
             if start_labels[i].item()==0==end_labels[i].item():
-                efv_labels[i]=0.
-            else:
                 efv_labels[i]=1.
+            else:
+                efv_labels[i]=0.
         efv_labels=efv_labels.float()
 
         return input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels,efv_labels
