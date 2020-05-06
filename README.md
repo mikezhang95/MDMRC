@@ -1,7 +1,7 @@
 
 # MDMRC: Multi-Document Machine Reading Comprehensive
 
-This is the framework for MDMRC problem. This frameworks consists of two main parts, retriever and reader. Retriever selects k documents as candidates. Reader returns the most possible answers from these candidates.    
+This is the framework for MDMRC problem. This framework consists of two main parts, retriever and reader. Retriever selects k documents as candidates. Reader returns the most possible answers from these candidates.    
 
 ## Requirement
 ```bash 
