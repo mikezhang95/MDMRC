@@ -1,7 +1,8 @@
 """
     This is the virtual base class of retriever
 """
-
+import random
+import copy
 import torch
 from torch.nn import Dropout, Linear, RReLU
 from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup, BertModel
@@ -154,8 +155,8 @@ class BertReader(BaseReader):
 
 
         # do mask on sequencese
-        seq_mask = ~attention_mask.bool()
-        # seq_mask = ~attention_mask.byte()
+#         seq_mask = ~attention_mask.bool()
+        seq_mask = ~attention_mask.byte()
         start_logits = start_logits.masked_fill(seq_mask, -1e4)
         end_logits = end_logits.masked_fill(seq_mask, -1e4)
 
@@ -238,18 +239,76 @@ class BertReader(BaseReader):
         end_labels = to_torch(np.stack(end_labels).reshape(-1), use_gpu=self.config.use_gpu)
 
         return input_ids, attention_mask, token_type_ids, input_seqs, query_lens, start_labels, end_labels
-
+    
+    def add_noise_to_labels(self,start_positions,end_positions,ignored_index):
+        bound=self.config.noise_labels_offset_bound
+        for i in range(len(start_positions)):
+            s=start_positions[i]
+            e=end_positions[i]
+            if(e-s<=bound+1):
+                continue
+            start_positions[i]=max(1,s+random.randint(-bound,bound))
+            end_positions[i]=max(s,e+random.randint(-bound,bound))
+        start_positions.clamp_(1, ignored_index) #omit [CLS]
+        end_positions.clamp_(1, ignored_index) #omit [CLS]
+        return start_positions,end_positions
+    
+    def typeloss(self,ss,es,mysp,myep):
+        """
+        position的标签1为负样本（0处的分数越大），0为正样本
+        NOTE:sp,ep所指的tensor也发生了变化（in-place）
+        """
+        sp,ep=copy.deepcopy(mysp),copy.deepcopy(myep)
+        for i in range(len(sp)):
+            if(sp[i].item()!=0 or ep[i].item()!=0):
+                sp[i]=ep[i]=0
+            else:
+                sp[i]=ep[i]=1
+        sp=sp.float().detach()
+        ep=ep.float().detach()
+        ss,es=ss[:,0].float(),es[:,0].float()
+        cr=torch.nn.BCEWithLogitsLoss()
+        ret=cr(ss,sp)+cr(es,ep)
+        ret*=self.config.typeloss_epsilon
+        return ret
 
     def compute_loss(self, start_logits, end_logits, start_labels, end_labels):
         """
         """
-        loss_fn = torch.nn.CrossEntropyLoss()
-        start_loss = loss_fn(start_logits, start_labels)
-        end_loss = loss_fn(end_logits, end_labels)
+        ignored_index=start_logits.size()[1]
+        loss_fn = torch.nn.CrossEntropyLoss(ignore_index=ignored_index)
+        start_labels_n,end_labels_n=copy.deepcopy(start_labels),copy.deepcopy(end_labels)
+        if self.config.add_noise_labels: #在start，end标签上加入小幅随机偏移（对抗噪声）
+            start_labels_n, end_labels_n = self.add_noise_to_labels(start_labels_n, end_labels_n,ignored_index)
+        start_loss = loss_fn(start_logits, start_labels_n)
+        end_loss = loss_fn(end_logits, end_labels_n)
         loss = start_loss + end_loss
+        if self.config.add_gp: #加入grandient penalty
+            loss += self.grad_penalty(loss)
+        if self.config.add_typeloss: #加入二分类损失
+            loss += self.typeloss(start_logits,end_logits,start_labels_n,end_labels_n)
         return loss
-
-
+    
+    def grad_penalty(self,loss):
+        if loss.requires_grad==False: #val
+            return 0
+        #train
+        ori_grad=[param.grad for param in self.parameters()]
+        loss.backward(retain_graph=True)
+        penalty_loss=0
+        module=self.bert.module if self.n_gpu>0 else self.bert
+        for i,param in enumerate(module.embeddings.parameters()):
+            if ori_grad[i] is None:
+                penalty_loss+=torch.norm(param.grad,p='fro')
+            else:
+                penalty_loss+=torch.norm(param.grad-ori_grad[i],p='fro')
+        penalty_loss*=self.config.gp_epsilon
+        #recover
+        for i,param in enumerate(self.parameters()):
+            param.grad=ori_grad[i]
+            
+        del ori_grad,module
+        return penalty_loss
 
     def predict(self, queries, start_logits, end_logits, input_seqs, query_lens):
         """
@@ -311,7 +370,9 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
         doc_cnt += 1
         # for one document
         s = length
+#         print(f"s={s},sl={start_logit}")
         i = to_numpy(torch.argmax(start_logit[s:])) + s 
+#         print(f"i={i},el={end_logit}")
         j = to_numpy(torch.argmax(end_logit[i:])) + i
         score = start_logit[i] + end_logit[j] - start_logit[0] - end_logit[0]
         span = (i-s,j-s)

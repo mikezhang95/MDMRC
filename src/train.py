@@ -33,6 +33,14 @@ parser.add_argument('--config_name', type=str, default="bm25_bert")
 parser.add_argument('--forward_only', action='store_true')
 parser.add_argument('--alias', type=str, default="")
 parser.add_argument('--debug', action='store_true')
+parser.add_argument('--localhost',type=str,default="23456")
+parser.add_argument('--add_gp',action='store_true')
+parser.add_argument('--gp_epsilon',type=float,default=0.4)
+parser.add_argument('--add_noise_labels',action='store_true')
+parser.add_argument('--noise_labels_offset_bound',type=int,default=1)#s,e offset
+parser.add_argument('--add_typeloss',action='store_true')
+parser.add_argument('--typeloss_epsilon',type=float,default=1)
+parser.add_argument('--val_epoch_ratio',type=float,default=1)
 args = parser.parse_args()
 
 
@@ -41,13 +49,23 @@ config_path = BASE_DIR + "configs/" + args.config_name + ".conf"
 config = Pack(json.load(open(config_path)))
 config["forward_only"] = args.forward_only
 config["debug"] = args.debug
-
+config["add_gp"]=args.add_gp
+config["add_noise_labels"]=args.add_noise_labels
+config["add_typeloss"]=args.add_typeloss
+config["val_epoch_ratio"]=args.val_epoch_ratio
+if args.add_gp:
+    config["gp_epsilon"]=args.gp_epsilon
+if args.add_noise_labels:
+    config["noise_labels_offset_bound"]=args.noise_labels_offset_bound
+if args.add_typeloss:
+    config["typeloss_epsilon"]=args.typeloss_epsilon
+    
 # set gpu
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = config.gpu_ids
 config.use_gpu = torch.cuda.device_count() > 0
 if config.use_gpu:
-    torch.distributed.init_process_group(backend='nccl', init_method='tcp://localhost:23456', rank=0, world_size=1)
+    torch.distributed.init_process_group(backend='nccl', init_method=f'tcp://localhost:{args.localhost}', rank=0, world_size=1)
 
 # set random_seed/logger/save_path
 set_seed(config.random_seed)
@@ -69,7 +87,7 @@ train_data, test_data, documents = load_data(config)
 # split dataset into train/val 4:1
 config.batch_size = math.floor(config.batch_size*1.0/config.gradient_accumulation_steps)
 train_loader, val_loader = get_data_loader(train_data, batch_size=config.batch_size, split_ratio=0.2, use_gpu=config.use_gpu, shuffle=True)
-test_loader,_ = get_data_loader(test_data, batch_size=config.batch_size, split_ratio=0.0, use_gpu=config.use_gpu, shuffle=False)
+test_loader,_ = get_data_loader(test_data, batch_size=config.test_batch_size, split_ratio=0.0, use_gpu=config.use_gpu, shuffle=False)
 config["num_samples"]= len(train_data)
 
 
@@ -84,11 +102,17 @@ model = (retriever, reader)
 # load pretrain model before training
 if not config.forward_only and config.pretrain_folder != "":
     pretrain_path = os.path.join(stats_path, config.pretrain_folder)
+    logger.info(f"use pretrain in dir {pretrain_path}")
     best_epoch = find_best_model(pretrain_path)
+    logger.info(f"[retriever,reader]={best_epoch}")
     retriever.load(pretrain_path, best_epoch[0])
     reader.load(pretrain_path, best_epoch[1])
 
 ##################### Training #####################
+"""
+NOTE: best_epoch不再代表最好效果的那一个epoch，而代表最好效果的那个step后那个point（考虑到grad_acc，所以一个update_batch一个step）
+结合best_epoch,num_batch,grad_acc可以知道所存模型处于哪个epoch的第几个batch的阶段保存的
+"""
 best_epoch = None
 if not config.forward_only:
     # save config
