@@ -6,3 +6,4 @@ torch==1.4.0
 nltk==3.4.5
 sklearn==3.8.1
 gensim
+tqdm
