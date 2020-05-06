@@ -51,9 +51,11 @@ class NegRetriever(BaseRetriever):
             # do this only in train/val
             if not self.config.forward_only and 'doc_id' in query:
                 pos_cands = query["pos_cand"]
-                topk = min(topk, len(query["neg_cand"]))
-                neg_cands = query["neg_cand"][:topk] 
-                neg_weights = query["neg_weight"][:topk] 
+                # topk = min(topk, len(query["neg_cand"]))
+                # neg_cands = query["neg_cand"][:topk] 
+                # neg_weights = query["neg_weight"][:topk] 
+                neg_cands = query["neg_cand"]
+                neg_weights = query["neg_weight"]
 
                 # sample positive
                 num_pos = min(NUM_POS, len(pos_cands))
@@ -62,7 +64,8 @@ class NegRetriever(BaseRetriever):
                 # sample negative
                 num_neg = num_pos
                 # weights: uniform or importance sampling !
-                weights = softmax(np.array(neg_weights))
+                gamma = 2.0 # 1.0  small value = uniform sampling
+                weights = softmax(np.array(neg_weights)*gamma)
                 selected_neg = list(np.random.choice(neg_cands, size=num_neg, replace=False, p=weights))
 
                 selected_all = selected_pos + selected_neg 
