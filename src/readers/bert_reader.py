@@ -99,9 +99,9 @@ class BertReader(BaseReader):
             loss.backward()
 
         if (step + 1) % self.config.gradient_accumulation_steps == 0 :
-            # clip gradients
-            # max_grad_norm = 1.0
-            # if args.fp16:
+            # # clip gradients
+            # max_grad_norm = 5.0
+            # if self.config.fp16:
                 # torch.nn.utils.clip_grad_norm_(self.amp.master_params(self.optimizer), max_grad_norm)
             # else:
             #     torch.nn.utils.clip_grad_norm_(self.parameters(), max_grad_norm)
@@ -293,15 +293,8 @@ class BertReader(BaseReader):
                 # print(tok_to_orig_index[-1])
                 # raise NotImplementedError
 
-
-#             qid = query["question_id"]
-            # for ii, record in enumerate(records):
-                # did = query["doc_candidates"][ii][0]
-                # logit = "\t".join(record)
-                # wf.write("{}\t{}\t{}\n".format(qid, did, logit))
+            query["records"] = records
             
-# wf = open("bert_logits.txt", "a")
-
 
 # Method 1: y = max_z argmax_y[ p(y|z,x) ]
 def find_best_answer(query_lens, start_logits, end_logits, weights=None):
@@ -329,6 +322,9 @@ def find_best_answer(query_lens, start_logits, end_logits, weights=None):
             best_span = span 
             best_doc = doc_cnt
 
+        # ss = [str(e) for e in to_numpy(start_logit)]
+        # ee = [str(e) for e in to_numpy(end_logit)]
+        # records.append([str(length), " ".join(ss), " ".join(ee)])
         records.append([str(to_numpy(start_logit[i])), str(to_numpy(end_logit[j])), str(to_numpy(start_logit[0])), str(to_numpy(end_logit[0]))])
 
     return best_span, best_doc, records

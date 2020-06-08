@@ -11,6 +11,7 @@ import time
 import json
 import logging
 import numpy as np
+from tqdm import tqdm
 
 from data_loader import get_data_loader, save_badcase
 from utils import merge_dict
@@ -146,18 +147,17 @@ def validate(model, data_loader, f=None):
     return loss_retriever, loss_reader
 
 
-def generate(model, data_loader, f):
-    f.write("id\tdocid\tanswer\n")
-    lines = []
+def generate(model, data_loader, pred_f=None, logit_f=None):
+
+    if pred_f is not None:
+        pred_f.write("id\tdocid\tanswer\n")
 
     # models
     retriever, reader = model
     retriever.eval()
     reader.eval()
 
-    for i, batch in enumerate(data_loader):
-
-        logger.info("Batch {}/{}".format(i, len(data_loader)))
+    for i, batch in tqdm(enumerate(data_loader)):
 
         with torch.no_grad():
             # 1. retriever forward
@@ -170,9 +170,18 @@ def generate(model, data_loader, f):
                 qid = query["question_id"]
                 docid = query["doc_id_pred"].split("-")[0]
                 answer = query["answer_pred"]
-                lines.append("%s\t%s\t%s\n"%(qid, docid, answer))
-    
-    f.write("".join(lines))
+
+                # write predictions
+                if pred_f is not None:
+                    pred_f.write("%s\t%s\t%s\n"%(qid, docid, answer))
+
+                # write logits
+                if logit_f is not None:
+                    records = query["records"]
+                    for ii, record in enumerate(records):
+                        did = query["doc_candidates"][ii][0]
+                        logit = "\t".join(record)
+                        logit_f.write("{}\t{}\t{}\n".format(qid, did, logit))
 
     logger.info('--- Generation Done ---')
     return 

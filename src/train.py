@@ -113,8 +113,10 @@ with open(os.path.join(saved_path, '{}-badcase.csv'.format(best_epoch)), 'w') as
 
 ##################### Generation #####################
 logger.info("\n***** Generation on TEST *****")
+# f2 = open(os.path.join(saved_path, 'test_logits.csv'),"w")
 with open(os.path.join(saved_path, '{}-prediction.csv'.format(best_epoch)), 'w') as f:
-    generate(model, test_loader, f)
+    # generate(model, test_loader, pred_f=f, logit_f=f2)
+    generate(model, test_loader, pred_f=f)
 
 end_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
 logger.info('[END]\n' + end_time)

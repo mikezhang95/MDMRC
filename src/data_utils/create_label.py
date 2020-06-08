@@ -8,6 +8,7 @@ from tqdm import tqdm
 import heapq
 from word_util import syn_words, MyTokenizer
 
+TITLE_LEN = 30
 t = MyTokenizer(syn_words)
 
 def create_neg(train_data):
@@ -147,6 +148,9 @@ def bm25_retrieve(train_data, test_data, documents):
         jieba_cut = t.tokenize(doc['context'], filter_stop_word=True, norm_flag=True)
         doc['jieba_cut'] = jieba_cut
         
+    ### add titles (first sentence) ###
+    add_title(documents)
+
     ### add tags (cities, organizations) ###
     add_tags(documents)
 
@@ -167,6 +171,8 @@ def bm25_retrieve(train_data, test_data, documents):
         indexes = heapq.nlargest(100, range(len(match_scores)), match_scores.__getitem__)
         doc["bm25_result"] = [(doc_list[i], match_scores[i])  for i in indexes]
 
+    calculate_topk(train_data)
+
 
     print("Test Data") 
     for i, doc in tqdm(enumerate(test_data)):
@@ -176,7 +182,6 @@ def bm25_retrieve(train_data, test_data, documents):
         indexes = heapq.nlargest(100, range(len(match_scores)), match_scores.__getitem__)
         doc["bm25_result"] = [(doc_list[i], match_scores[i])  for i in indexes]
 
-    calculate_topk(train_data)
         
 def calculate_topk(train_data):
     topk = [1,5,10,20,30,40,50,60,70,80,90,100]
@@ -227,10 +232,30 @@ def add_tags(documents):
         real_doc_id = key[:len("230b6fc2a40937f9adf45ea97abad846")]
         tag = tags[real_doc_id]   
         # add city tags into jieba_cut
-        if len(tag["city"]) <= 3 :
+        if len(tag["city"]) <= 5 : # 3
             jieba_cut += list(tag["city"])
         doc["jieba_cut"] = jieba_cut
         
+def add_title(documents): 
+    title_dict = {}
+    for key, doc in documents.items():
+        real_doc_id = key[:len("230b6fc2a40937f9adf45ea97abad846")]
+        p_id = key[len("230b6fc2a40937f9adf45ea97abad846")+1:]
+
+        if p_id == "p0" :
+            # first sentence in p0 as title
+            context = doc["context"]
+            title = context.split(" ")[0]
+            title_len = min(len(title), TITLE_LEN)
+            title = title[:title_len]
+            title = t.tokenize(title, filter_stop_word=True, norm_flag=True)
+            title_dict[real_doc_id] = title
+
+    for key, doc in documents.items():
+        jieba_cut = doc['jieba_cut']
+        real_doc_id = key[:len("230b6fc2a40937f9adf45ea97abad846")]
+        title = title_dict[real_doc_id]
+        doc["jieba_cut"] = jieba_cut + title
 
 # Calculate Top
 if __name__ == '__main__':
@@ -238,38 +263,70 @@ if __name__ == '__main__':
     import os
     from split_doc import split_doc
     CUR_DIR = os.path.dirname(os.path.abspath(__file__))  + '/'
-    RAW_DATA_DIR = CUR_DIR + "../../data/clean_data/"
 
-    # 1. load documents
-    document = {}
-    with open(RAW_DATA_DIR + "context.csv", "r") as f:
-        lines = f.readlines()[1:]
-        for line in lines:
-            e = line.strip().split('\t')
-            document[e[0]] = {"context": " ".join(e[1:])} 
+    # RAW_DATA_DIR = CUR_DIR + "../../data/clean_data/"
 
-    # 2. load train data 
-    train_data = []
-    with open(RAW_DATA_DIR + "train.csv", "r") as f:
-        lines = f.readlines()[1:]
-        for line in lines:
-            e = line.strip().split('\t')
-            if not e: break
-            record = {"question_id":e[0], "doc_id":e[1],
-                    "context":e[2], "answer":e[3]}
-            train_data.append(record)
+    # # 1. load documents
+    # document = {}
+    # with open(RAW_DATA_DIR + "context.csv", "r") as f:
+        # lines = f.readlines()[1:]
+        # for line in lines:
+            # e = line.strip().split('\t')
+            # document[e[0]] = {"context": " ".join(e[1:])} 
 
-    # 3. load test_data
-    test_data = [] 
-    with open(RAW_DATA_DIR + "test.csv", "r") as f:
-        lines = f.readlines()[1:]
-        for line in lines:
-            e = line.strip().split('\t')
-            if not e: break
-            test_data.append({"question_id":e[0], "context":e[1]})
+    # # 2. load train data 
+    # train_data = []
+    # with open(RAW_DATA_DIR + "train.csv", "r") as f:
+        # lines = f.readlines()[1:]
+        # for line in lines:
+            # e = line.strip().split('\t')
+            # if not e: break
+            # record = {"question_id":e[0], "doc_id":e[1],
+                    # "context":e[2], "answer":e[3]}
+            # train_data.append(record)
+
+
+    # # 3. load test_data
+    # test_data = [] 
+    # with open(RAW_DATA_DIR + "test.csv", "r") as f:
+        # lines = f.readlines()[1:]
+        # for line in lines:
+            # e = line.strip().split('\t')
+            # if not e: break
+            # test_data.append({"question_id":e[0], "context":e[1]})
                            
-    paragraph = split_doc(document)
-    document = paragraph # document becomes the new paragraph
+    # paragraph = split_doc(document)
+    # document = paragraph # document becomes the new paragraph
     
-    train_data = train_data
+    # train_data = train_data
+    # bm25_retrieve(train_data, test_data, document)
+
+    import json
+    RAW_DATA_DIR = CUR_DIR + "processed_title/"
+    with open(RAW_DATA_DIR+"document.json","r") as f:
+        document = json.load(f)
+
+    train_data = []
+    with open(RAW_DATA_DIR + "train.json", "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            train_data.append(json.loads(line))
+
+    test_data = []
+    with open(RAW_DATA_DIR + "test.json", "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            test_data.append(json.loads(line))
+
     bm25_retrieve(train_data, test_data, document)
+
+    with open(RAW_DATA_DIR + "new_train.json", "w") as f:
+        for d in train_data:
+            f.write(json.dumps(d, ensure_ascii=False)+'\n')
+
+
+    with open(RAW_DATA_DIR + "new_test.json", "w") as f:
+        for d in test_data:
+            f.write(json.dumps(d,ensure_ascii=False)+'\n')
+
+
